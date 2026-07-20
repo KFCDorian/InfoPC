@@ -9,6 +9,8 @@ struct MenuView: View {
             Divider()
             memorySection
             Divider()
+            processesSection
+            Divider()
             fansSection
             Divider()
             claudeSection
@@ -16,7 +18,7 @@ struct MenuView: View {
             footer
         }
         .padding(14)
-        .frame(width: 320)
+        .frame(width: 380)
     }
 
     // MARK: - CPU / GPU
@@ -34,8 +36,7 @@ struct MenuView: View {
         HStack {
             Image(systemName: icon).frame(width: 18)
             Text(label).bold().frame(width: 40, alignment: .leading)
-            BatteryGauge(fraction: (usage ?? 0) / 100,
-                         color: color(forPercent: usage ?? 0))
+            BatteryGauge(fraction: (usage ?? 0) / 100, color: .white)
             Text(usage.map { String(format: "%.0f %%", $0) } ?? "–")
                 .monospacedDigit().frame(width: 46, alignment: .trailing)
             Text(temp.map { String(format: "%.0f °C", $0) } ?? "–")
@@ -59,8 +60,37 @@ struct MenuView: View {
                 }
             }
             if let mem = model.memory {
-                BatteryGauge(fraction: mem.fraction,
-                             color: color(forPercent: mem.fraction * 100))
+                BatteryGauge(fraction: mem.fraction, color: .white)
+            }
+        }
+    }
+
+    // MARK: - Processus
+
+    private var processesSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Image(systemName: "list.bullet").frame(width: 18)
+                Text("Processus").bold()
+                Spacer()
+                Text("les plus gourmands").font(.caption).foregroundStyle(.secondary)
+            }
+            // En-têtes de colonnes (le petit tableau : CPU / GPU / Mém au-dessus)
+            HStack(spacing: 6) {
+                Text("").frame(width: 20)
+                Text("Nom").font(.caption2).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text("CPU").font(.caption2).foregroundStyle(.secondary).frame(width: ProcCols.cpu)
+                Text("GPU").font(.caption2).foregroundStyle(.secondary).frame(width: ProcCols.gpu)
+                Text("Mém").font(.caption2).foregroundStyle(.secondary).frame(width: ProcCols.mem)
+                Text("").frame(width: ProcCols.kill)
+            }
+            if model.processes.isEmpty {
+                Text("Chargement…").font(.caption).foregroundStyle(.secondary)
+            } else {
+                ForEach(model.processes) { proc in
+                    ProcessRow(model: model, proc: proc)
+                }
             }
         }
     }
@@ -102,8 +132,7 @@ struct MenuView: View {
             }
             if let c = model.claude, c.isActive {
                 let fraction = min(1.0, Double(c.tokens) / Double(model.claudeLimit))
-                BatteryGauge(fraction: fraction,
-                             color: color(forPercent: fraction * 100))
+                BatteryGauge(fraction: fraction, color: .white)
                 HStack {
                     Text("\(ClaudeUsageReader.formatTokens(c.tokens)) / \(ClaudeUsageReader.formatTokens(model.claudeLimit)) tokens")
                     Spacer()
@@ -135,14 +164,6 @@ struct MenuView: View {
         String(format: "%.1f", Double(bytes) / 1_073_741_824)
     }
 
-    private func color(forPercent p: Double) -> Color {
-        switch p {
-        case ..<60: return .green
-        case ..<85: return .orange
-        default: return .red
-        }
-    }
-
     private func color(forTemp t: Double?) -> Color {
         guard let t else { return .secondary }
         switch t {
@@ -150,6 +171,45 @@ struct MenuView: View {
         case ..<90: return .orange
         default: return .red
         }
+    }
+}
+
+/// Largeurs des colonnes du tableau des processus (partagées en-tête / lignes).
+enum ProcCols {
+    static let cpu: CGFloat = 42
+    static let gpu: CGFloat = 42
+    static let mem: CGFloat = 46
+    static let kill: CGFloat = 44
+}
+
+struct ProcessRow: View {
+    @ObservedObject var model: StatsModel
+    let proc: ProcInfo
+
+    var body: some View {
+        HStack(spacing: 6) {
+            // Logo du processus
+            if let icon = proc.icon {
+                Image(nsImage: icon).resizable().frame(width: 18, height: 18)
+            } else {
+                Image(systemName: "gearshape.fill").frame(width: 18, height: 18)
+            }
+            Text(proc.name)
+                .lineLimit(1).truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(String(format: "%.0f%%", proc.cpu))
+                .monospacedDigit().frame(width: ProcCols.cpu)
+            Text("—")   // GPU par processus non exposé par macOS
+                .foregroundStyle(.tertiary).frame(width: ProcCols.gpu)
+            Text(String(format: "%.1f%%", proc.mem))
+                .monospacedDigit().frame(width: ProcCols.mem)
+
+            Button("KILL") { model.killProcess(proc.id) }
+                .buttonStyle(.borderedProminent).tint(.red)
+                .controlSize(.small).frame(width: ProcCols.kill)
+        }
+        .font(.system(size: 12))
     }
 }
 

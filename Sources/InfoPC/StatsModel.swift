@@ -59,6 +59,8 @@ final class StatsModel: ObservableObject {
     @Published var smcAvailable = true
     /// Jauges compactes rendues en image pour la barre de menus.
     @Published var menuBarImage: NSImage?
+    /// Processus les plus gourmands (rafraîchis moins souvent).
+    @Published var processes: [ProcInfo] = []
 
     let helperInstalled = FanController.isInstalled
 
@@ -79,14 +81,31 @@ final class StatsModel: ObservableObject {
         refreshFast()
         refreshClaude()
 
+        refreshProcesses()
+
         fastTimer = Timer(timeInterval: 2.0, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refreshFast() }
         }
-        slowTimer = Timer(timeInterval: 60.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refreshClaude() }
+        slowTimer = Timer(timeInterval: 3.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshProcesses()
+                self?.tick += 1
+                if (self?.tick ?? 0) % 20 == 0 { self?.refreshClaude() }
+            }
         }
         RunLoop.main.add(fastTimer!, forMode: .common)
         RunLoop.main.add(slowTimer!, forMode: .common)
+    }
+
+    private var tick = 0
+
+    private func refreshProcesses() {
+        processes = ProcessSampler.top(8)
+    }
+
+    func killProcess(_ pid: Int32) {
+        _ = ProcessSampler.kill(pid)
+        refreshProcesses()
     }
 
     private func refreshFast() {
@@ -111,20 +130,21 @@ final class StatsModel: ObservableObject {
         renderMenuBar()
     }
 
-    /// Rend les jauges CPU / GPU / RAM en image pour la barre de menus.
+    /// Rend les jauges CPU / GPU / RAM (+ températures) en image pour la barre.
     private func renderMenuBar() {
+        func tempStr(_ t: Double?) -> String? { t.map { "\(Int($0.rounded()))°" } }
         var items: [MenuBarGaugesView.Item] = [
-            .init(label: "C", fraction: (cpuUsage ?? 0) / 100),
-            .init(label: "G", fraction: (gpuUsage ?? 0) / 100),
+            .init(label: "CPU", fraction: (cpuUsage ?? 0) / 100, trailing: tempStr(cpuTemp)),
+            .init(label: "GPU", fraction: (gpuUsage ?? 0) / 100, trailing: tempStr(gpuTemp)),
         ]
         if let mem = memory {
-            items.append(.init(label: "R", fraction: mem.fraction))
+            items.append(.init(label: "RAM", fraction: mem.fraction, trailing: nil))
         }
 
         let renderer = ImageRenderer(content: MenuBarGaugesView(items: items))
         renderer.scale = NSScreen.main?.backingScaleFactor ?? 2
         if let image = renderer.nsImage {
-            image.isTemplate = false   // conserve les couleurs (vert/orange/rouge)
+            image.isTemplate = false   // conserve les couleurs (remplissage blanc)
             menuBarImage = image
         }
     }

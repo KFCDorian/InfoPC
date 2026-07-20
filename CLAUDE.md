@@ -20,9 +20,12 @@ Après modification du code : relancer `./scripts/install.sh --app` (rebuild + r
 - `Sources/SMCCore/` — client AppleSMC (IOKit) partagé : lecture capteurs, énumération des clés, écriture ventilateurs. **Attention** : la struct `SMCKeyData` doit faire exactement 80 octets (padding explicite dans `SMCKeyInfo` — Swift ne padde pas comme le C).
 - `Sources/InfoPC/` — l'app MenuBarExtra :
   - `SystemStats.swift` — CPU (host_processor_info), GPU (IORegistry `PerformanceStatistics` → `Device Utilization %`), RAM (vm_statistics64), températures SMC.
+  - `Processes.swift` — top processus via `/bin/ps -Ao pid,pcpu,pmem,comm`, tri par (CPU+mém), icônes via `NSRunningApplication`/`NSWorkspace`, `kill(pid, SIGTERM)`. **GPU par processus non exposé par macOS** → colonne affichée « — ».
   - `ClaudeUsage.swift` — parse `~/.claude/projects/**/*.jsonl`, reconstitue le bloc de 5 h courant (aligné à l'heure pleine, comme ccusage). Limite auto-calibrée dans UserDefaults.
-  - `StatsModel.swift` — ObservableObject, timers 2 s (capteurs) / 60 s (Claude).
-  - `MenuView.swift` — popover (style `.window` pour les sliders).
+  - `StatsModel.swift` — ObservableObject, timers 2 s (capteurs + rendu barre) / 3 s (processus) / ~60 s (Claude). Rend `MenuBarGaugesView` en `NSImage` (barre de menus n'accepte que texte/image).
+  - `BatteryGauge.swift` — barre arrondie qui se remplit (sans borne). `gaugeColor(forPercent:)` disponible mais les jauges sont actuellement en blanc.
+  - `MenuBarGaugesView.swift` — jauges compactes CPU/GPU/RAM (titre au-dessus, remplissage blanc, température à droite) pour la barre de menus.
+  - `MenuView.swift` — popover (style `.window` pour les sliders), inclut le tableau des processus avec bouton KILL (`ProcCols` = largeurs de colonnes partagées).
 - `Sources/fanctl/` — CLI privilégié installé dans `/usr/local/bin/infopc-fanctl` ; l'app l'appelle via `sudo -n` (règle NOPASSWD dans `/etc/sudoers.d/infopc`).
 
 ## Spécificités Apple Silicon (testé sur M5, Mac17,2)
