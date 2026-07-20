@@ -8,8 +8,11 @@ struct InfoPCApp: App {
         MenuBarExtra {
             MenuView(model: model)
         } label: {
-            Text(model.menuBarText)
-                .monospacedDigit()
+            if let image = model.menuBarImage {
+                Image(nsImage: image)
+            } else {
+                Text(model.menuBarText).monospacedDigit()
+            }
         }
         .menuBarExtraStyle(.window)
     }

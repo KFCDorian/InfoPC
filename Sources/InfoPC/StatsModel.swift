@@ -1,4 +1,6 @@
 import Foundation
+import SwiftUI
+import AppKit
 import SMCCore
 
 struct FanState: Identifiable {
@@ -55,6 +57,8 @@ final class StatsModel: ObservableObject {
     @Published var claude: ClaudeBlockUsage?
     @Published var claudeLimit: Int = ClaudeUsageReader.tokenLimit
     @Published var smcAvailable = true
+    /// Jauges compactes rendues en image pour la barre de menus.
+    @Published var menuBarImage: NSImage?
 
     let helperInstalled = FanController.isInstalled
 
@@ -102,6 +106,26 @@ final class StatsModel: ObservableObject {
                 }
             }
             fans = states
+        }
+
+        renderMenuBar()
+    }
+
+    /// Rend les jauges CPU / GPU / RAM en image pour la barre de menus.
+    private func renderMenuBar() {
+        var items: [MenuBarGaugesView.Item] = [
+            .init(label: "C", fraction: (cpuUsage ?? 0) / 100),
+            .init(label: "G", fraction: (gpuUsage ?? 0) / 100),
+        ]
+        if let mem = memory {
+            items.append(.init(label: "R", fraction: mem.fraction))
+        }
+
+        let renderer = ImageRenderer(content: MenuBarGaugesView(items: items))
+        renderer.scale = NSScreen.main?.backingScaleFactor ?? 2
+        if let image = renderer.nsImage {
+            image.isTemplate = false   // conserve les couleurs (vert/orange/rouge)
+            menuBarImage = image
         }
     }
 
