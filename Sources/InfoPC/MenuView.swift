@@ -34,8 +34,8 @@ struct MenuView: View {
         HStack {
             Image(systemName: icon).frame(width: 18)
             Text(label).bold().frame(width: 40, alignment: .leading)
-            ProgressView(value: (usage ?? 0) / 100)
-                .tint(color(forPercent: usage ?? 0))
+            BatteryGauge(fraction: (usage ?? 0) / 100,
+                         color: color(forPercent: usage ?? 0))
             Text(usage.map { String(format: "%.0f %%", $0) } ?? "–")
                 .monospacedDigit().frame(width: 46, alignment: .trailing)
             Text(temp.map { String(format: "%.0f °C", $0) } ?? "–")
@@ -59,8 +59,8 @@ struct MenuView: View {
                 }
             }
             if let mem = model.memory {
-                ProgressView(value: mem.fraction)
-                    .tint(color(forPercent: mem.fraction * 100))
+                BatteryGauge(fraction: mem.fraction,
+                             color: color(forPercent: mem.fraction * 100))
             }
         }
     }
@@ -102,8 +102,8 @@ struct MenuView: View {
             }
             if let c = model.claude, c.isActive {
                 let fraction = min(1.0, Double(c.tokens) / Double(model.claudeLimit))
-                ProgressView(value: fraction)
-                    .tint(color(forPercent: fraction * 100))
+                BatteryGauge(fraction: fraction,
+                             color: color(forPercent: fraction * 100))
                 HStack {
                     Text("\(ClaudeUsageReader.formatTokens(c.tokens)) / \(ClaudeUsageReader.formatTokens(model.claudeLimit)) tokens")
                     Spacer()
