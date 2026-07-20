@@ -54,7 +54,7 @@ struct MenuView: View {
         HStack {
             Image(systemName: icon).frame(width: 18)
             Text(label).bold().frame(width: 40, alignment: .leading)
-            BatteryGauge(fraction: (usage ?? 0) / 100, color: .white)
+            BatteryGauge(fraction: (usage ?? 0) / 100, color: .accentColor)
             Text(usage.map { String(format: "%.0f %%", $0) } ?? "–")
                 .monospacedDigit().frame(width: 46, alignment: .trailing)
             Text(temp.map { String(format: "%.0f °C", $0) } ?? "–")
@@ -78,7 +78,7 @@ struct MenuView: View {
                 }
             }
             if let mem = model.memory {
-                BatteryGauge(fraction: mem.fraction, color: .white)
+                BatteryGauge(fraction: mem.fraction, color: .accentColor)
             }
         }
     }
@@ -138,29 +138,51 @@ struct MenuView: View {
     // MARK: - Claude
 
     private var claudeSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Image(systemName: "sparkles").frame(width: 18)
                 Text("Limites Claude").bold()
                 Spacer()
-                if let c = model.claude, c.isActive {
-                    Text("réinit. \(c.blockEnd.formatted(date: .omitted, time: .shortened))")
-                        .foregroundStyle(.secondary).font(.caption)
-                }
             }
-            if let c = model.claude, c.isActive {
+            if let live = model.claudeLive {
+                // Usage réel du compte (endpoint OAuth /usage)
+                limitBar(title: "Session (5 h)",
+                         percent: live.fiveHourPercent,
+                         resetsAt: live.fiveHourResetsAt)
+                limitBar(title: "Semaine",
+                         percent: live.sevenDayPercent,
+                         resetsAt: live.sevenDayResetsAt)
+            } else if let c = model.claude, c.isActive {
+                // Repli : estimation locale rapportée au plus gros bloc historique
                 let fraction = min(1.0, Double(c.tokens) / Double(model.claudeLimit))
-                BatteryGauge(fraction: fraction, color: .white)
+                BatteryGauge(fraction: fraction, color: .accentColor)
                 HStack {
-                    Text("\(ClaudeUsageReader.formatTokens(c.tokens)) / \(ClaudeUsageReader.formatTokens(model.claudeLimit)) tokens")
+                    Text("≈ \(ClaudeUsageReader.formatTokens(c.tokens)) tokens (estimation locale)")
                     Spacer()
                     Text(String(format: "%.0f %%", fraction * 100)).monospacedDigit()
                 }
                 .font(.caption).foregroundStyle(.secondary)
             } else {
-                Text("Aucun bloc de 5 h actif")
+                Text("Usage indisponible")
                     .font(.caption).foregroundStyle(.secondary)
             }
+        }
+    }
+
+    /// Une barre de limite réelle : titre, jauge remplie au pourcentage, % et reset.
+    private func limitBar(title: String, percent: Double, resetsAt: Date?) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text(title).font(.caption)
+                Spacer()
+                if let r = resetsAt {
+                    Text("réinit. \(r.formatted(date: .omitted, time: .shortened))")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+                Text(String(format: "%.0f %%", percent))
+                    .font(.caption).monospacedDigit().bold()
+            }
+            BatteryGauge(fraction: percent / 100, color: .accentColor)
         }
     }
 
@@ -206,12 +228,16 @@ struct ProcessRow: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            // Logo du processus
-            if let icon = proc.icon {
-                Image(nsImage: icon).resizable().frame(width: 18, height: 18)
-            } else {
-                Image(systemName: "gearshape.fill").frame(width: 18, height: 18)
+            // Logo du processus, teinté à la couleur d'accentuation système
+            Group {
+                if let icon = proc.icon {
+                    Image(nsImage: icon).renderingMode(.template).resizable()
+                } else {
+                    Image(systemName: "gearshape.fill").renderingMode(.template).resizable()
+                }
             }
+            .foregroundStyle(Color.accentColor)
+            .frame(width: 18, height: 18)
             Text(proc.name)
                 .lineLimit(1).truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)

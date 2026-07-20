@@ -60,7 +60,11 @@ final class StatsModel: ObservableObject {
     @Published var fans: [FanState] = []
     @Published var fanManual: [Int: Bool] = [:]   // index → mode forcé actif
     @Published var claude: ClaudeBlockUsage?
-    @Published var claudeLimit: Int = ClaudeUsageReader.tokenLimit
+    /// Dénominateur de la jauge Claude locale = plus gros bloc de 5 h historique
+    /// (repli si l'API d'usage réelle n'est pas joignable).
+    @Published var claudeLimit: Int = 0
+    /// Usage réel du compte (endpoint OAuth `/usage`) : source prioritaire.
+    @Published var claudeLive: ClaudeLiveUsage?
     @Published var smcAvailable = true
     /// Jauges compactes rendues en image pour la barre de menus.
     @Published var menuBarImage: NSImage?
@@ -93,18 +97,23 @@ final class StatsModel: ObservableObject {
             smcAvailable = false
         }
         refreshFast()
-        refreshClaude()
-
         refreshProcesses()
+        refreshClaude()
+        refreshClaudeMax()
+        refreshClaudeLive()
 
         fastTimer = Timer(timeInterval: 2.0, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refreshFast() }
         }
-        slowTimer = Timer(timeInterval: 3.0, repeats: true) { [weak self] _ in
+        // Processus toutes les 10 s ; Claude toutes les 60 s ; max historique / 10 min.
+        slowTimer = Timer(timeInterval: 10.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.refreshProcesses()
-                self?.tick += 1
-                if (self?.tick ?? 0) % 20 == 0 { self?.refreshClaude() }
+                guard let self else { return }
+                self.refreshProcesses()
+                self.tick += 1
+                if self.tick % 6 == 0 { self.refreshClaude() }
+                if self.tick % 18 == 0 { self.refreshClaudeLive() }   // 180 s (intervalle sûr)
+                if self.tick % 60 == 0 { self.refreshClaudeMax() }
             }
         }
         RunLoop.main.add(fastTimer!, forMode: .common)
@@ -112,6 +121,7 @@ final class StatsModel: ObservableObject {
     }
 
     private var tick = 0
+    private var claudeMax = 0
 
     private func refreshProcesses() {
         processes = ProcessSampler.top(8)
@@ -120,6 +130,41 @@ final class StatsModel: ObservableObject {
     func killProcess(_ pid: Int32) {
         _ = ProcessSampler.kill(pid)
         refreshProcesses()
+    }
+
+    /// Recalcule le bloc de 5 h courant (lecture fichiers, hors thread principal).
+    private func refreshClaude() {
+        Task.detached(priority: .utility) {
+            let block = ClaudeUsageReader.currentBlock()
+            await MainActor.run {
+                self.claude = block
+                self.recomputeClaudeLimit()
+            }
+        }
+    }
+
+    /// Recalcule le plus gros bloc historique = dénominateur de la jauge.
+    private func refreshClaudeMax() {
+        Task.detached(priority: .utility) {
+            let maxTokens = ClaudeUsageReader.historicalMaxBlockTokens()
+            await MainActor.run {
+                self.claudeMax = maxTokens
+                self.recomputeClaudeLimit()
+            }
+        }
+    }
+
+    private func recomputeClaudeLimit() {
+        // La limite ne peut pas être plus petite que le bloc courant (jauge ≤ 100 %).
+        claudeLimit = max(claudeMax, claude?.tokens ?? 0, 1)
+    }
+
+    /// Récupère l'usage réel du compte via l'endpoint OAuth `/usage`.
+    private func refreshClaudeLive() {
+        Task {
+            let live = await ClaudeUsageAPI.fetch()
+            await MainActor.run { if let live { self.claudeLive = live } }
+        }
     }
 
     private func refreshFast() {
@@ -164,18 +209,6 @@ final class StatsModel: ObservableObject {
             image.isTemplate = false   // conserve le blanc
             menuBarImage = image
         }
-    }
-
-    private func refreshClaude() {
-        claude = ClaudeUsageReader.currentBlock()
-        claudeLimit = ClaudeUsageReader.tokenLimit
-    }
-
-    func setClaudeLimit(millions: Double) {
-        let tokens = Int(millions * 1_000_000)
-        guard tokens > 0 else { return }
-        ClaudeUsageReader.tokenLimit = tokens
-        claudeLimit = tokens
     }
 
     func setFanSpeed(_ index: Int, rpm: Double) {
