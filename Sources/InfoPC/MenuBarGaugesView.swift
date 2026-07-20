@@ -1,40 +1,40 @@
 import SwiftUI
 
-/// Version compacte des jauges, rendue en image pour être affichée en
-/// permanence dans la barre de menus (sans ouvrir le popover).
-/// Chaque colonne : titre (CPU/GPU/RAM) au-dessus, barre blanche en dessous,
-/// et éventuellement la température à droite de la barre.
+/// Version compacte rendue en image pour la barre de menus.
+/// À gauche : une seule température (capteur choisi). Puis trois colonnes
+/// CPU / GPU / RAM, chacune avec son titre au-dessus de la barre. Tout en blanc.
 struct MenuBarGaugesView: View {
-    struct Item {
+    struct Gauge {
         let label: String
         let fraction: Double
-        let trailing: String?   // température, ex. "55°"
     }
-    let items: [Item]
+    let temperature: String?
+    let gauges: [Gauge]
 
-    // Gris moyen : lisible sur barre de menus claire comme sombre.
-    private let ink = Color(white: 0.6)
+    private let labelHeight: CGFloat = 8
 
     var body: some View {
-        HStack(spacing: 10) {
-            ForEach(items.indices, id: \.self) { i in
+        HStack(spacing: 9) {
+            if let temperature {
                 VStack(spacing: 1) {
-                    Text(items[i].label)
-                        .font(.system(size: 7.5, weight: .bold))
-                        .foregroundStyle(ink)
-                    HStack(spacing: 3) {
-                        BatteryGauge(fraction: items[i].fraction,
-                                     color: .white,
-                                     height: 9,
-                                     outline: ink,
-                                     animated: false)
-                            .frame(width: 22)
-                        if let t = items[i].trailing {
-                            Text(t)
-                                .font(.system(size: 8.5, weight: .medium))
-                                .foregroundStyle(ink)
-                        }
-                    }
+                    // Cale invisible pour aligner la température sur les barres
+                    Text(" ").font(.system(size: labelHeight, weight: .bold))
+                    Text(temperature)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+            }
+            ForEach(gauges.indices, id: \.self) { i in
+                VStack(spacing: 1) {
+                    Text(gauges[i].label)
+                        .font(.system(size: labelHeight, weight: .bold))
+                        .foregroundStyle(.white)
+                    BatteryGauge(fraction: gauges[i].fraction,
+                                 color: .white,
+                                 height: 9,
+                                 outline: .white,
+                                 animated: false)
+                        .frame(width: 22)
                 }
             }
         }

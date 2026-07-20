@@ -29,7 +29,25 @@ struct MenuView: View {
                     usage: model.cpuUsage, temp: model.cpuTemp)
             statRow(icon: "rectangle.3.group", label: "GPU",
                     usage: model.gpuUsage, temp: model.gpuTemp)
+            tempSelector
         }
+    }
+
+    /// Choix du capteur dont la température s'affiche dans la barre de menus.
+    /// Les deux cases sont mutuellement exclusives.
+    private var tempSelector: some View {
+        HStack(spacing: 12) {
+            Text("Température barre :").font(.caption).foregroundStyle(.secondary)
+            Toggle("CPU", isOn: Binding(
+                get: { model.tempSource == .cpu },
+                set: { if $0 { model.tempSource = .cpu } }))
+            Toggle("GPU", isOn: Binding(
+                get: { model.tempSource == .gpu },
+                set: { if $0 { model.tempSource = .gpu } }))
+            Spacer()
+        }
+        .toggleStyle(.checkbox)
+        .font(.caption)
     }
 
     private func statRow(icon: String, label: String, usage: Double?, temp: Double?) -> some View {
