@@ -8,6 +8,21 @@ enum TempSource: String {
     case cpu, gpu
 }
 
+/// Éléments affichables dans la barre de menus (personnalisation).
+enum MenuBarItem: String, CaseIterable, Identifiable {
+    case cpu, gpu, ram, network, temperature
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .cpu: return "CPU"
+        case .gpu: return "GPU"
+        case .ram: return "RAM"
+        case .network: return "Réseau"
+        case .temperature: return "Température"
+        }
+    }
+}
+
 struct FanState: Identifiable {
     let id: Int
     var current: Double
@@ -53,10 +68,14 @@ enum FanController {
 @MainActor
 final class StatsModel: ObservableObject {
     @Published var cpuUsage: Double?
+    @Published var cpuPerCore: [Double] = []
     @Published var cpuTemp: Double?
     @Published var gpuUsage: Double?
     @Published var gpuTemp: Double?
+    @Published var power: Double?          // puissance système (W, clé SMC PSTR)
     @Published var memory: SystemStats.MemoryUsage?
+    @Published var disk: SystemStats.DiskUsage?
+    @Published var network: NetworkSampler.Throughput?
     @Published var fans: [FanState] = []
     @Published var fanManual: [Int: Bool] = [:]   // index → mode forcé actif
     @Published var claude: ClaudeBlockUsage?
@@ -77,18 +96,33 @@ final class StatsModel: ObservableObject {
             renderMenuBar()
         }
     }
+    /// Éléments cochés pour la barre de menus (personnalisation).
+    @Published var menuBarItems: Set<MenuBarItem> {
+        didSet {
+            UserDefaults.standard.set(menuBarItems.map(\.rawValue), forKey: "menuBarItems")
+            renderMenuBar()
+        }
+    }
 
     let helperInstalled = FanController.isInstalled
+    var performanceCores: Int { cpuSampler.performanceCores }
+    var efficiencyCores: Int { cpuSampler.efficiencyCores }
 
     private var smc: SMC?
     private var sensors: TemperatureSensors?
     private let cpuSampler = CPUSampler()
+    private let netSampler = NetworkSampler()
     private var fastTimer: Timer?
     private var slowTimer: Timer?
 
     init() {
         let saved = UserDefaults.standard.string(forKey: "menuBarTempSource")
         tempSource = TempSource(rawValue: saved ?? "") ?? .cpu
+        if let raw = UserDefaults.standard.array(forKey: "menuBarItems") as? [String] {
+            menuBarItems = Set(raw.compactMap(MenuBarItem.init(rawValue:)))
+        } else {
+            menuBarItems = [.cpu, .gpu, .ram, .temperature]   // défaut
+        }
         do {
             let smc = try SMC()
             self.smc = smc
@@ -168,11 +202,16 @@ final class StatsModel: ObservableObject {
     }
 
     private func refreshFast() {
-        cpuUsage = cpuSampler.sample()
+        let sample = cpuSampler.sample()
+        cpuUsage = sample?.overall
+        cpuPerCore = sample?.perCore ?? cpuPerCore
         gpuUsage = SystemStats.gpuUsage()
         memory = SystemStats.memoryUsage()
         cpuTemp = sensors?.cpuTemp
         gpuTemp = sensors?.gpuTemp
+        power = try? smc?.readNumber("PSTR")
+        disk = SystemStats.diskUsage()
+        network = netSampler.sample() ?? network
 
         if let smc {
             let count = smc.fanCount()
@@ -189,20 +228,32 @@ final class StatsModel: ObservableObject {
         renderMenuBar()
     }
 
-    /// Rend les jauges CPU / GPU / RAM en image pour la barre, avec une seule
-    /// température (celle du capteur choisi) affichée à gauche.
+    /// Rend la barre de menus selon les éléments cochés (personnalisation).
     private func renderMenuBar() {
         let temp = (tempSource == .cpu) ? cpuTemp : gpuTemp
-        let tempStr = temp.map { "\(Int($0.rounded()))°" }
-        var gauges: [MenuBarGaugesView.Gauge] = [
-            .init(label: "CPU", fraction: (cpuUsage ?? 0) / 100),
-            .init(label: "GPU", fraction: (gpuUsage ?? 0) / 100),
-        ]
-        if let mem = memory {
+        let tempStr = (menuBarItems.contains(.temperature) ? temp : nil)
+            .map { "\(Int($0.rounded()))°" }
+
+        var gauges: [MenuBarGaugesView.Gauge] = []
+        if menuBarItems.contains(.cpu) {
+            gauges.append(.init(label: "CPU", fraction: (cpuUsage ?? 0) / 100))
+        }
+        if menuBarItems.contains(.gpu) {
+            gauges.append(.init(label: "GPU", fraction: (gpuUsage ?? 0) / 100))
+        }
+        if menuBarItems.contains(.ram), let mem = memory {
             gauges.append(.init(label: "RAM", fraction: mem.fraction))
         }
 
-        let view = MenuBarGaugesView(temperature: tempStr, gauges: gauges)
+        let net = (menuBarItems.contains(.network) ? network : nil)
+            .map { "↓\(MenuBarFormat.speed($0.rxBytesPerSec)) ↑\(MenuBarFormat.speed($0.txBytesPerSec))" }
+
+        // Repli si rien n'est coché, pour ne pas afficher une barre vide.
+        if gauges.isEmpty && tempStr == nil && net == nil {
+            gauges.append(.init(label: "CPU", fraction: (cpuUsage ?? 0) / 100))
+        }
+
+        let view = MenuBarGaugesView(temperature: tempStr, network: net, gauges: gauges)
         let renderer = ImageRenderer(content: view)
         renderer.scale = NSScreen.main?.backingScaleFactor ?? 2
         if let image = renderer.nsImage {

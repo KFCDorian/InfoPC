@@ -8,12 +8,16 @@ struct MenuView: View {
             processorSection
             Divider()
             memorySection
+            diskSection
+            networkSection
             Divider()
             processesSection
             Divider()
             fansSection
             Divider()
             claudeSection
+            Divider()
+            menuBarCustomization
             Divider()
             footer
         }
@@ -27,9 +31,39 @@ struct MenuView: View {
         VStack(alignment: .leading, spacing: 8) {
             statRow(icon: "cpu", label: "CPU",
                     usage: model.cpuUsage, temp: model.cpuTemp)
+            perCoreGrid
             statRow(icon: "rectangle.3.group", label: "GPU",
                     usage: model.gpuUsage, temp: model.gpuTemp)
+            if let w = model.power {
+                HStack {
+                    Image(systemName: "bolt.fill").frame(width: 18).foregroundStyle(.yellow)
+                    Text("Puissance").bold()
+                    Spacer()
+                    Text(String(format: "%.1f W", w)).monospacedDigit().foregroundStyle(.secondary)
+                }
+            }
             tempSelector
+        }
+    }
+
+    /// Grille d'usage par cœur logique (P puis E selon sysctl).
+    private var perCoreGrid: some View {
+        let cores = model.cpuPerCore
+        let p = model.performanceCores
+        return VStack(alignment: .leading, spacing: 3) {
+            if !cores.isEmpty {
+                HStack(spacing: 3) {
+                    Text("Cœurs").font(.caption2).foregroundStyle(.secondary)
+                        .frame(width: 58, alignment: .leading)
+                    ForEach(cores.indices, id: \.self) { i in
+                        BatteryGauge(fraction: cores[i] / 100, color: .accentColor, height: 12)
+                            .frame(width: 16)
+                            .help("Cœur \(i + 1) : \(Int(cores[i])) %")
+                    }
+                }
+                Text("\(p) performance · \(model.efficiencyCores) efficience")
+                    .font(.caption2).foregroundStyle(.tertiary)
+            }
         }
     }
 
@@ -80,6 +114,69 @@ struct MenuView: View {
             if let mem = model.memory {
                 BatteryGauge(fraction: mem.fraction, color: .accentColor)
             }
+        }
+    }
+
+    // MARK: - Disque
+
+    private var diskSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Image(systemName: "internaldrive").frame(width: 18)
+                Text("Disque").bold()
+                Spacer()
+                if let d = model.disk {
+                    Text("\(Format.gib(d.usedBytes)) / \(Format.gib(d.totalBytes)) Go")
+                        .monospacedDigit().foregroundStyle(.secondary)
+                }
+            }
+            if let d = model.disk {
+                BatteryGauge(fraction: d.fraction, color: .accentColor)
+            }
+        }
+    }
+
+    // MARK: - Réseau
+
+    private var networkSection: some View {
+        HStack {
+            Image(systemName: "network").frame(width: 18)
+            Text("Réseau").bold()
+            Spacer()
+            if let n = model.network {
+                Label(Format.mbps(n.rxBytesPerSec), systemImage: "arrow.down")
+                    .monospacedDigit().foregroundStyle(.secondary)
+                Label(Format.mbps(n.txBytesPerSec), systemImage: "arrow.up")
+                    .monospacedDigit().foregroundStyle(.secondary)
+            } else {
+                Text("–").foregroundStyle(.secondary)
+            }
+        }
+        .font(.callout)
+    }
+
+    // MARK: - Personnalisation de la barre
+
+    private var menuBarCustomization: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Image(systemName: "menubar.rectangle").frame(width: 18)
+                Text("Afficher dans la barre").bold()
+            }
+            // Cases à cocher pour chaque élément
+            let cols = [GridItem(.adaptive(minimum: 110), alignment: .leading)]
+            LazyVGrid(columns: cols, alignment: .leading, spacing: 2) {
+                ForEach(MenuBarItem.allCases) { item in
+                    Toggle(item.label, isOn: Binding(
+                        get: { model.menuBarItems.contains(item) },
+                        set: { on in
+                            if on { model.menuBarItems.insert(item) }
+                            else { model.menuBarItems.remove(item) }
+                        }))
+                }
+            }
+            .toggleStyle(.checkbox)
+            .font(.caption)
         }
     }
 

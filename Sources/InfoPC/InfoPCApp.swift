@@ -5,6 +5,26 @@ struct InfoPCApp: App {
     @StateObject private var model = StatsModel()
 
     init() {
+        // Mode debug système : icônes des processus + cœurs.
+        if CommandLine.arguments.contains("--sys-debug") {
+            let procs = ProcessSampler.top(8)
+            print("=== Top processus (icône) ===")
+            for p in procs {
+                print(String(format: "  %-24@ cpu=%.0f%% mem=%.1f%% icône=%@",
+                             p.name as NSString, p.cpu, p.mem,
+                             p.icon != nil ? "OUI" : "non"))
+            }
+            let s = CPUSampler()
+            _ = s.sample()
+            Thread.sleep(forTimeInterval: 0.5)
+            if let sample = s.sample() {
+                print("=== Cœurs (\(s.performanceCores) P + \(s.efficiencyCores) E) ===")
+                print("  usage global : \(Int(sample.overall)) %")
+                print("  par cœur : \(sample.perCore.map { Int($0) })")
+            }
+            exit(0)
+        }
+
         // Mode debug : « InfoPC --claude-debug » imprime l'usage Claude et quitte.
         if CommandLine.arguments.contains("--claude-debug") {
             if let b = ClaudeUsageReader.currentBlock() {

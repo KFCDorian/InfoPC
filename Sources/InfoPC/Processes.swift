@@ -40,7 +40,7 @@ enum ProcessSampler {
         return topRows.map { row in
             let running = NSRunningApplication(processIdentifier: row.pid)
             let name = running?.localizedName ?? (row.path as NSString).lastPathComponent
-            let icon = running?.icon ?? fallbackIcon(forPath: row.path)
+            let icon = resolveIcon(running: running, path: row.path)
             return ProcInfo(id: row.pid, name: name, cpu: row.cpu, mem: row.mem, icon: icon)
         }
     }
@@ -71,16 +71,28 @@ enum ProcessSampler {
 
     private static var iconCache: [String: NSImage] = [:]
 
-    private static func fallbackIcon(forPath path: String) -> NSImage? {
+    /// Récupère la vraie icône couleur de l'app. Priorité :
+    /// 1) app GUI en cours (`NSRunningApplication.icon`) ;
+    /// 2) bundle `.app` déduit du chemin de l'exécutable ;
+    /// 3) icône du fichier exécutable ;
+    /// sinon `nil` (la vue affichera un symbole neutre plutôt qu'une icône noire).
+    private static func resolveIcon(running: NSRunningApplication?, path: String) -> NSImage? {
+        if let icon = running?.icon { return icon }
         if let cached = iconCache[path] { return cached }
-        let icon: NSImage
-        if FileManager.default.fileExists(atPath: path) {
-            icon = NSWorkspace.shared.icon(forFile: path)
-        } else {
-            icon = NSImage(systemSymbolName: "gearshape.fill",
-                           accessibilityDescription: nil) ?? NSImage()
+
+        var result: NSImage?
+        if let appPath = appBundlePath(fromExecutable: path) {
+            result = NSWorkspace.shared.icon(forFile: appPath)
+        } else if let bundle = running?.bundleURL {
+            result = NSWorkspace.shared.icon(forFile: bundle.path)
         }
-        iconCache[path] = icon
-        return icon
+        if let result { iconCache[path] = result }
+        return result
+    }
+
+    /// `/Applications/Foo.app/Contents/MacOS/Foo` → `/Applications/Foo.app`
+    private static func appBundlePath(fromExecutable path: String) -> String? {
+        guard let range = path.range(of: ".app/Contents/MacOS/") else { return nil }
+        return String(path[..<range.lowerBound]) + ".app"
     }
 }

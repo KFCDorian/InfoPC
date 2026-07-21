@@ -2,11 +2,33 @@ import Foundation
 import IOKit
 import SMCCore
 
-/// Sonde CPU : usage global en % via host_processor_info (delta entre deux appels)
+/// Résultat d'un échantillon CPU : usage global + usage par cœur logique.
+struct CPUSample {
+    let overall: Double
+    let perCore: [Double]
+}
+
+/// Sonde CPU : usage global et par cœur via host_processor_info (delta entre
+/// deux appels). Le nombre de cœurs Performance / Efficience vient de sysctl.
 final class CPUSampler {
     private var previousTicks: [(user: UInt32, system: UInt32, nice: UInt32, idle: UInt32)] = []
 
-    func sample() -> Double? {
+    /// Nombre de cœurs Performance (perflevel0) et Efficience (perflevel1).
+    let performanceCores: Int
+    let efficiencyCores: Int
+
+    init() {
+        performanceCores = CPUSampler.sysctlInt("hw.perflevel0.logicalcpu") ?? 0
+        efficiencyCores = CPUSampler.sysctlInt("hw.perflevel1.logicalcpu") ?? 0
+    }
+
+    private static func sysctlInt(_ name: String) -> Int? {
+        var value: Int = 0
+        var size = MemoryLayout<Int>.size
+        return sysctlbyname(name, &value, &size, nil, 0) == 0 ? value : nil
+    }
+
+    func sample() -> CPUSample? {
         var cpuCount: natural_t = 0
         var info: processor_info_array_t?
         var infoCount: mach_msg_type_number_t = 0
@@ -31,16 +53,66 @@ final class CPUSampler {
         guard previousTicks.count == ticks.count else { return nil }
 
         var busy: Double = 0, total: Double = 0
+        var perCore: [Double] = []
         for (prev, cur) in zip(previousTicks, ticks) {
             let dUser = Double(cur.0 &- prev.user)
             let dSys = Double(cur.1 &- prev.system)
             let dNice = Double(cur.2 &- prev.nice)
             let dIdle = Double(cur.3 &- prev.idle)
-            busy += dUser + dSys + dNice
-            total += dUser + dSys + dNice + dIdle
+            let coreBusy = dUser + dSys + dNice
+            let coreTotal = coreBusy + dIdle
+            perCore.append(coreTotal > 0 ? coreBusy / coreTotal * 100.0 : 0)
+            busy += coreBusy
+            total += coreTotal
         }
         guard total > 0 else { return nil }
-        return busy / total * 100.0
+        return CPUSample(overall: busy / total * 100.0, perCore: perCore)
+    }
+}
+
+/// Sonde réseau : débit montant/descendant en octets/s, calculé sur le delta
+/// des compteurs d'octets des interfaces physiques (hors loopback).
+final class NetworkSampler {
+    private var previous: (rx: UInt64, tx: UInt64, time: Date)?
+
+    struct Throughput {
+        let rxBytesPerSec: Double   // téléchargement
+        let txBytesPerSec: Double   // envoi
+    }
+
+    func sample() -> Throughput? {
+        var counters = readCounters()
+        let now = Date()
+        defer { previous = (counters.rx, counters.tx, now) }
+        guard let prev = previous else { return nil }
+        let dt = now.timeIntervalSince(prev.time)
+        guard dt > 0 else { return nil }
+        // Protection contre un reset de compteur
+        let rxDelta = counters.rx >= prev.rx ? counters.rx - prev.rx : 0
+        let txDelta = counters.tx >= prev.tx ? counters.tx - prev.tx : 0
+        return Throughput(rxBytesPerSec: Double(rxDelta) / dt,
+                          txBytesPerSec: Double(txDelta) / dt)
+    }
+
+    private func readCounters() -> (rx: UInt64, tx: UInt64) {
+        var rx: UInt64 = 0, tx: UInt64 = 0
+        var addrs: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&addrs) == 0, let first = addrs else { return (0, 0) }
+        defer { freeifaddrs(addrs) }
+
+        var ptr: UnsafeMutablePointer<ifaddrs>? = first
+        while let cur = ptr {
+            defer { ptr = cur.pointee.ifa_next }
+            let name = String(cString: cur.pointee.ifa_name)
+            if name == "lo0" { continue }                    // loopback
+            guard let addr = cur.pointee.ifa_addr,
+                  addr.pointee.sa_family == UInt8(AF_LINK),
+                  let data = cur.pointee.ifa_data else { continue }
+            let stats = data.assumingMemoryBound(to: if_data.self)
+            rx += UInt64(stats.pointee.ifi_ibytes)
+            tx += UInt64(stats.pointee.ifi_obytes)
+        }
+        return (rx, tx)
     }
 }
 
@@ -91,6 +163,24 @@ enum SystemStats {
                     + UInt64(stats.compressor_page_count)) * pageSize
         return MemoryUsage(usedBytes: used,
                            totalBytes: ProcessInfo.processInfo.physicalMemory)
+    }
+
+    struct DiskUsage {
+        let freeBytes: Int64
+        let totalBytes: Int64
+        var usedBytes: Int64 { totalBytes - freeBytes }
+        var fraction: Double { totalBytes > 0 ? Double(usedBytes) / Double(totalBytes) : 0 }
+    }
+
+    /// Espace du volume de démarrage (« / »).
+    static func diskUsage() -> DiskUsage? {
+        let url = URL(fileURLWithPath: "/")
+        guard let values = try? url.resourceValues(forKeys: [
+            .volumeAvailableCapacityForImportantUsageKey,
+            .volumeTotalCapacityKey]),
+              let total = values.volumeTotalCapacity,
+              let free = values.volumeAvailableCapacityForImportantUsage else { return nil }
+        return DiskUsage(freeBytes: Int64(free), totalBytes: Int64(total))
     }
 }
 

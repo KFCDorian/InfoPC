@@ -9,6 +9,7 @@ struct MenuBarGaugesView: View {
         let fraction: Double
     }
     let temperature: String?
+    var network: String? = nil
     let gauges: [Gauge]
 
     private let labelHeight: CGFloat = 8
@@ -21,6 +22,15 @@ struct MenuBarGaugesView: View {
                     Text(" ").font(.system(size: labelHeight, weight: .bold))
                     Text(temperature)
                         .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+            }
+            if let network {
+                VStack(spacing: 1) {
+                    Text("Mbps").font(.system(size: labelHeight - 1, weight: .bold))
+                        .foregroundStyle(.white)
+                    Text(network)
+                        .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(.white)
                 }
             }
