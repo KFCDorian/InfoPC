@@ -1,8 +1,11 @@
 import SwiftUI
+import AppKit
 
-/// Version compacte rendue en image pour la barre de menus.
-/// À gauche : une seule température (capteur choisi). Puis trois colonnes
-/// CPU / GPU / RAM, chacune avec son titre au-dessus de la barre. Tout en blanc.
+/// Version compacte rendue en image pour la barre de menus, sur une seule ligne
+/// pour pouvoir utiliser la vraie police de la barre de menus macOS
+/// (`NSFont.menuBarFont`) — la même que l'heure et les menus Fichier/Édition.
+/// À gauche : température (capteur choisi) puis réseau ; ensuite les colonnes
+/// CPU / GPU / RAM (libellé + barre blanche). Tout en blanc.
 struct MenuBarGaugesView: View {
     struct Gauge {
         let label: String
@@ -12,39 +15,32 @@ struct MenuBarGaugesView: View {
     var network: String? = nil
     let gauges: [Gauge]
 
-    private let labelHeight: CGFloat = 8
+    /// Police native de la barre de menus macOS.
+    private var menuFont: Font {
+        Font(NSFont.menuBarFont(ofSize: 0))
+    }
+    private var gaugeHeight: CGFloat {
+        // Barre calée sur la hauteur des majuscules de la police de la barre.
+        NSFont.menuBarFont(ofSize: 0).capHeight + 2
+    }
 
     var body: some View {
-        HStack(spacing: 9) {
+        HStack(spacing: 8) {
             if let temperature {
-                VStack(spacing: 1) {
-                    // Cale invisible pour aligner la température sur les barres
-                    Text(" ").font(.system(size: labelHeight, weight: .bold))
-                    Text(temperature)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
+                Text(temperature).font(menuFont).foregroundStyle(.white)
             }
             if let network {
-                VStack(spacing: 1) {
-                    Text("Mbps").font(.system(size: labelHeight - 1, weight: .bold))
-                        .foregroundStyle(.white)
-                    Text(network)
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(.white)
-                }
+                Text(network).font(menuFont).foregroundStyle(.white)
             }
             ForEach(gauges.indices, id: \.self) { i in
-                VStack(spacing: 1) {
-                    Text(gauges[i].label)
-                        .font(.system(size: labelHeight, weight: .bold))
-                        .foregroundStyle(.white)
+                HStack(spacing: 4) {
+                    Text(gauges[i].label).font(menuFont).foregroundStyle(.white)
                     BatteryGauge(fraction: gauges[i].fraction,
                                  color: .white,
-                                 height: 9,
+                                 height: gaugeHeight,
                                  outline: .white,
                                  animated: false)
-                        .frame(width: 22)
+                        .frame(width: 24)
                 }
             }
         }
