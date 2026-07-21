@@ -1,11 +1,13 @@
 import SwiftUI
 
-/// Couleur d'une jauge selon son niveau de remplissage (0–100).
+/// Couleur d'une jauge selon son niveau de remplissage (0–100) :
+/// < 30 % bleu (accent), 30–60 % jaune, 60–80 % orange, ≥ 80 % rouge.
 func gaugeColor(forPercent p: Double) -> Color {
     switch p {
-    case ..<60: return .green
-    case ..<85: return .orange
-    default: return .red
+    case 80...: return .red
+    case 60..<80: return .orange
+    case 30..<60: return .yellow
+    default: return .accentColor
     }
 }
 

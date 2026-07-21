@@ -96,7 +96,8 @@ struct MenuView: View {
                     Text("Cœurs").font(.caption2).foregroundStyle(.secondary)
                         .frame(width: 58, alignment: .leading)
                     ForEach(cores.indices, id: \.self) { i in
-                        BatteryGauge(fraction: cores[i] / 100, color: .accentColor, height: 12)
+                        BatteryGauge(fraction: cores[i] / 100,
+                                     color: gaugeColor(forPercent: cores[i]), height: 12)
                             .frame(width: 16)
                             .help("Cœur \(i + 1) : \(Int(cores[i])) %")
                     }
@@ -111,7 +112,7 @@ struct MenuView: View {
         HStack {
             Image(systemName: icon).frame(width: 18)
             Text(label).bold().frame(width: 40, alignment: .leading)
-            BatteryGauge(fraction: (usage ?? 0) / 100, color: .accentColor)
+            BatteryGauge(fraction: (usage ?? 0) / 100, color: gaugeColor(forPercent: usage ?? 0))
             Text(usage.map { String(format: "%.0f %%", $0) } ?? "–")
                 .monospacedDigit().frame(width: 46, alignment: .trailing)
             Text(temp.map { String(format: "%.0f °C", $0) } ?? "–")
@@ -135,7 +136,7 @@ struct MenuView: View {
                 }
             }
             if let mem = model.memory {
-                BatteryGauge(fraction: mem.fraction, color: .accentColor)
+                BatteryGauge(fraction: mem.fraction, color: gaugeColor(forPercent: mem.fraction * 100))
             }
         }
     }
@@ -154,7 +155,7 @@ struct MenuView: View {
                 }
             }
             if let d = model.disk {
-                BatteryGauge(fraction: d.fraction, color: .accentColor)
+                BatteryGauge(fraction: d.fraction, color: gaugeColor(forPercent: d.fraction * 100))
             }
         }
     }
@@ -320,7 +321,7 @@ struct MenuView: View {
             } else if let c = model.claude, c.isActive {
                 // Repli : estimation locale rapportée au plus gros bloc historique
                 let fraction = min(1.0, Double(c.tokens) / Double(model.claudeLimit))
-                BatteryGauge(fraction: fraction, color: .accentColor)
+                BatteryGauge(fraction: fraction, color: gaugeColor(forPercent: fraction * 100))
                 HStack {
                     Text("≈ \(ClaudeUsageReader.formatTokens(c.tokens)) tokens (estimation locale)")
                     Spacer()
@@ -350,7 +351,7 @@ struct MenuView: View {
                 Text(String(format: "%.0f %%", percent))
                     .font(.caption).monospacedDigit().bold()
             }
-            BatteryGauge(fraction: percent / 100, color: .accentColor)
+            BatteryGauge(fraction: percent / 100, color: gaugeColor(forPercent: percent))
         }
     }
 
