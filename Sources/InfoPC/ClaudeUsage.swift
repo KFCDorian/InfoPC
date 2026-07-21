@@ -70,10 +70,15 @@ enum ClaudeUsageReader {
                     .contentModificationDate ?? .distantPast
                 if mtime < horizon { continue }
             }
-            guard let content = try? String(contentsOf: url, encoding: .utf8) else { continue }
-            for line in content.split(separator: "\n") {
-                guard line.contains("\"usage\"") else { continue }
-                guard let obj = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+            // Fichier mappé en mémoire (pages adossées au fichier, évictables) :
+            // évite de charger tout le contenu dans le tas — un transcript peut
+            // peser des dizaines de Mo.
+            guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { continue }
+            let usageMarker = Data("\"usage\"".utf8)
+            for lineSlice in data.split(separator: 0x0A) {   // 0x0A = '\n'
+                guard lineSlice.range(of: usageMarker) != nil else { continue }
+                let line = Data(lineSlice)
+                guard let obj = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
                       let tsString = obj["timestamp"] as? String,
                       let message = obj["message"] as? [String: Any],
                       let usage = message["usage"] as? [String: Any],

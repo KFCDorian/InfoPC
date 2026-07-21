@@ -2,13 +2,25 @@ import Foundation
 import AppKit
 import Darwin
 
-/// Un processus avec sa consommation CPU / mémoire et son icône.
+/// Un processus individuel avec sa consommation CPU / mémoire.
 struct ProcInfo: Identifiable {
     let id: Int32          // pid
     let name: String
     let cpu: Double        // % CPU (peut dépasser 100 sur plusieurs cœurs)
     let mem: Double        // % de la RAM physique
+}
+
+/// Un groupe d'processus appartenant à la même application (ex. Chrome et
+/// tous ses processus d'aide), avec consommation agrégée et icône.
+struct ProcGroup: Identifiable {
+    let id: String         // clé de regroupement (bundle .app ou nom)
+    let name: String
     let icon: NSImage?
+    let cpu: Double        // somme CPU des membres
+    let mem: Double        // somme mémoire des membres
+    let members: [ProcInfo]
+    var count: Int { members.count }
+    var pids: [Int32] { members.map(\.id) }
 }
 
 /// Critère de tri de la liste des processus.
@@ -19,9 +31,9 @@ enum ProcSortKey: String, CaseIterable, Identifiable {
 }
 
 enum ProcessSampler {
-    /// Les N processus les plus gourmands, triés selon `sortBy`.
-    /// GPU par processus non exposé publiquement par macOS → non renseigné ici.
-    static func top(_ limit: Int = 8, sortBy: ProcSortKey = .cpu) -> [ProcInfo] {
+    /// Les N groupes d'applications les plus gourmands, triés selon `sortBy`.
+    /// Les processus d'une même app (Chrome + ses helpers) sont fusionnés.
+    static func topGroups(_ limit: Int = 12, sortBy: ProcSortKey = .cpu) -> [ProcGroup] {
         guard let raw = runPS() else { return [] }
 
         struct Row { let pid: Int32; let cpu: Double; let mem: Double; let path: String }
@@ -40,16 +52,40 @@ enum ProcessSampler {
             rows.append(Row(pid: pid, cpu: cpu, mem: mem, path: path))
         }
 
-        let topRows = rows
-            .sorted { sortBy == .cpu ? $0.cpu > $1.cpu : $0.mem > $1.mem }
-            .prefix(limit)
+        // Regroupement par application (bundle .app) ou, à défaut, par nom.
+        struct Accum { var name: String; var path: String; var cpu = 0.0; var mem = 0.0; var members: [ProcInfo] = [] }
+        var groups: [String: Accum] = [:]
 
-        return topRows.map { row in
+        for row in rows {
+            let fullPath = pidPath(row.pid) ?? row.path
+            let bundle = appBundlePath(fromPath: fullPath)
             let running = NSRunningApplication(processIdentifier: row.pid)
-            let name = running?.localizedName ?? (row.path as NSString).lastPathComponent
-            let icon = resolveIcon(running: running, pid: row.pid, psPath: row.path)
-            return ProcInfo(id: row.pid, name: name, cpu: row.cpu, mem: row.mem, icon: icon)
+            // Clé de regroupement : bundle .app si possible, sinon nom d'exécutable.
+            let procName = running?.localizedName ?? (fullPath as NSString).lastPathComponent
+            let key = bundle ?? procName
+            let groupName = bundle.map { ($0 as NSString).lastPathComponent.replacingOccurrences(of: ".app", with: "") }
+                ?? procName
+
+            let member = ProcInfo(id: row.pid, name: procName, cpu: row.cpu, mem: row.mem)
+            if groups[key] == nil {
+                groups[key] = Accum(name: groupName, path: bundle ?? fullPath)
+            }
+            groups[key]?.cpu += row.cpu
+            groups[key]?.mem += row.mem
+            groups[key]?.members.append(member)
         }
+
+        let sorted = groups.map { (key, acc) -> ProcGroup in
+            let icon = resolveIcon(path: acc.path)
+            let members = acc.members.sorted {
+                sortBy == .cpu ? $0.cpu > $1.cpu : $0.mem > $1.mem
+            }
+            return ProcGroup(id: key, name: acc.name, icon: icon,
+                             cpu: acc.cpu, mem: acc.mem, members: members)
+        }
+        .sorted { sortBy == .cpu ? $0.cpu > $1.cpu : $0.mem > $1.mem }
+
+        return Array(sorted.prefix(limit))
     }
 
     /// Termine un processus (SIGTERM). Sans privilège root, ne peut agir que sur
@@ -78,25 +114,16 @@ enum ProcessSampler {
 
     private static var iconCache: [String: NSImage] = [:]
 
-    /// Récupère la vraie icône couleur de l'app. Priorité :
-    /// 1) app GUI en cours (`NSRunningApplication.icon`) ;
-    /// 2) bundle `.app` déduit du chemin complet (`proc_pidpath`, plus fiable que ps) ;
-    /// 3) `bundleURL` de l'app en cours ;
-    /// sinon `nil` (la vue affichera un symbole neutre plutôt qu'une icône noire).
-    private static func resolveIcon(running: NSRunningApplication?, pid: Int32, psPath: String) -> NSImage? {
-        if let icon = running?.icon { return icon }
-
-        let fullPath = pidPath(pid) ?? psPath
-        if let cached = iconCache[fullPath] { return cached }
-
-        var result: NSImage?
-        if let appPath = appBundlePath(fromPath: fullPath) {
-            result = NSWorkspace.shared.icon(forFile: appPath)
-        } else if let bundle = running?.bundleURL {
-            result = NSWorkspace.shared.icon(forFile: bundle.path)
-        }
-        if let result { iconCache[fullPath] = result }
-        return result
+    /// Icône couleur d'une app à partir de son chemin (bundle `.app` ou exécutable).
+    /// Renvoie `nil` pour les daemons/CLI sans bundle → la vue met un symbole neutre
+    /// (plutôt qu'une icône « exécutable » noire).
+    private static func resolveIcon(path: String) -> NSImage? {
+        let appPath = path.hasSuffix(".app") ? path : appBundlePath(fromPath: path)
+        guard let appPath else { return nil }
+        if let cached = iconCache[appPath] { return cached }
+        let icon = NSWorkspace.shared.icon(forFile: appPath)
+        iconCache[appPath] = icon
+        return icon
     }
 
     /// Chemin absolu complet d'un processus via libproc (fiable, non tronqué).

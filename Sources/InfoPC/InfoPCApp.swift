@@ -7,12 +7,12 @@ struct InfoPCApp: App {
     init() {
         // Mode debug système : icônes des processus + cœurs.
         if CommandLine.arguments.contains("--sys-debug") {
-            let procs = ProcessSampler.top(8)
-            print("=== Top processus (icône) ===")
-            for p in procs {
-                print(String(format: "  %-24@ cpu=%.0f%% mem=%.1f%% icône=%@",
-                             p.name as NSString, p.cpu, p.mem,
-                             p.icon != nil ? "OUI" : "non"))
+            let groups = ProcessSampler.topGroups(12)
+            print("=== Top groupes (icône) ===")
+            for g in groups {
+                print(String(format: "  %-24@ ×%d cpu=%.0f%% mem=%.1f%% icône=%@",
+                             g.name as NSString, g.count, g.cpu, g.mem,
+                             g.icon != nil ? "OUI" : "non"))
             }
             let s = CPUSampler()
             _ = s.sample()

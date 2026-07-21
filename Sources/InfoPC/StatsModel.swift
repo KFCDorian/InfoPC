@@ -87,8 +87,8 @@ final class StatsModel: ObservableObject {
     @Published var smcAvailable = true
     /// Jauges compactes rendues en image pour la barre de menus.
     @Published var menuBarImage: NSImage?
-    /// Processus les plus gourmands (rafraîchis moins souvent).
-    @Published var processes: [ProcInfo] = []
+    /// Groupes de processus (par application) les plus gourmands.
+    @Published var processGroups: [ProcGroup] = []
     /// Capteur dont la température est affichée dans la barre de menus.
     @Published var tempSource: TempSource {
         didSet {
@@ -148,7 +148,7 @@ final class StatsModel: ObservableObject {
                 self.tick += 1
                 if self.tick % 6 == 0 { self.refreshClaude() }
                 if self.tick % 18 == 0 { self.refreshClaudeLive() }   // 180 s (intervalle sûr)
-                if self.tick % 60 == 0 { self.refreshClaudeMax() }
+                if self.tick % 180 == 0 { self.refreshClaudeMax() }   // 30 min (scan complet)
             }
         }
         RunLoop.main.add(fastTimer!, forMode: .common)
@@ -184,11 +184,17 @@ final class StatsModel: ObservableObject {
     }
 
     private func refreshProcesses() {
-        processes = ProcessSampler.top(40, sortBy: procSort)
+        processGroups = ProcessSampler.topGroups(20, sortBy: procSort)
     }
 
     func killProcess(_ pid: Int32) {
         _ = ProcessSampler.kill(pid)
+        refreshProcesses()
+    }
+
+    /// Termine tous les processus d'un groupe (ex. toutes les fenêtres Chrome).
+    func killGroup(_ group: ProcGroup) {
+        for pid in group.pids { _ = ProcessSampler.kill(pid) }
         refreshProcesses()
     }
 

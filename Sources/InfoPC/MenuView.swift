@@ -251,21 +251,21 @@ struct MenuView: View {
                     Text("Mém").font(.caption2).foregroundStyle(.secondary).frame(width: ProcCols.mem)
                     Text("").frame(width: ProcCols.kill)
                 }
-                if model.processes.isEmpty {
+                if model.processGroups.isEmpty {
                     Text("Chargement…").font(.caption).foregroundStyle(.secondary)
                 } else {
-                    // Liste défilable pour naviguer parmi tous les processus
+                    // Liste défilable, groupée par application
                     ScrollView {
                         VStack(spacing: 4) {
-                            ForEach(model.processes) { proc in
-                                ProcessRow(model: model, proc: proc)
+                            ForEach(model.processGroups) { group in
+                                ProcGroupRow(model: model, group: group)
                             }
                         }
                     }
                     .frame(height: 240)
                 }
             } else {
-                Text("\(model.processes.count) processus — trié par \(model.procSort.label)")
+                Text("\(model.processGroups.count) applications — triées par \(model.procSort.label)")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -391,37 +391,81 @@ enum ProcCols {
     static let kill: CGFloat = 44
 }
 
-struct ProcessRow: View {
+/// Ligne d'un groupe d'application : icône, nom (+ nombre de processus),
+/// CPU/mém agrégés, KILL (ferme tout le groupe) et flèche pour dérouler les
+/// processus individuels.
+struct ProcGroupRow: View {
     @ObservedObject var model: StatsModel
-    let proc: ProcInfo
+    let group: ProcGroup
+    @State private var expanded = false
+
+    private var expandable: Bool { group.count > 1 }
 
     var body: some View {
-        HStack(spacing: 6) {
-            // Vrai logo du processus (icône couleur de l'app)
-            if let icon = proc.icon {
-                Image(nsImage: icon).resizable()
-                    .frame(width: 18, height: 18)
-            } else {
-                Image(systemName: "gearshape.fill")
-                    .foregroundStyle(.secondary)
-                    .frame(width: 18, height: 18)
-            }
-            Text(proc.name)
-                .lineLimit(1).truncationMode(.tail)
+        VStack(spacing: 2) {
+            HStack(spacing: 6) {
+                // Flèche de déroulement (si plusieurs processus)
+                Button {
+                    withAnimation(.easeInOut(duration: 0.12)) { expanded.toggle() }
+                } label: {
+                    Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .frame(width: 12)
+                .opacity(expandable ? 1 : 0)
+                .disabled(!expandable)
+
+                if let icon = group.icon {
+                    Image(nsImage: icon).resizable().frame(width: 18, height: 18)
+                } else {
+                    Image(systemName: "gearshape.fill")
+                        .foregroundStyle(.secondary).frame(width: 18, height: 18)
+                }
+                HStack(spacing: 4) {
+                    Text(group.name).lineLimit(1).truncationMode(.tail)
+                    if expandable {
+                        Text("×\(group.count)").font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 4).padding(.vertical, 1)
+                            .background(Color.secondary.opacity(0.15), in: Capsule())
+                    }
+                }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text(String(format: "%.0f%%", proc.cpu))
-                .monospacedDigit().frame(width: ProcCols.cpu)
-            Text("—")   // GPU par processus non exposé par macOS
-                .foregroundStyle(.tertiary).frame(width: ProcCols.gpu)
-            Text(String(format: "%.1f%%", proc.mem))
-                .monospacedDigit().frame(width: ProcCols.mem)
+                Text(String(format: "%.0f%%", group.cpu))
+                    .monospacedDigit().frame(width: ProcCols.cpu)
+                Text("—").foregroundStyle(.tertiary).frame(width: ProcCols.gpu)
+                Text(String(format: "%.1f%%", group.mem))
+                    .monospacedDigit().frame(width: ProcCols.mem)
 
-            Button("KILL") { model.killProcess(proc.id) }
-                .buttonStyle(.borderedProminent).tint(.red)
-                .controlSize(.small).frame(width: ProcCols.kill)
+                Button("KILL") { model.killGroup(group) }
+                    .buttonStyle(.borderedProminent).tint(.red)
+                    .controlSize(.small).frame(width: ProcCols.kill)
+            }
+            .font(.system(size: 12))
+
+            // Processus individuels du groupe
+            if expanded {
+                ForEach(group.members) { member in
+                    HStack(spacing: 6) {
+                        Spacer().frame(width: 30)
+                        Text(member.name).lineLimit(1).truncationMode(.tail)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Text(String(format: "%.0f%%", member.cpu))
+                            .monospacedDigit().frame(width: ProcCols.cpu)
+                        Text("—").foregroundStyle(.tertiary).frame(width: ProcCols.gpu)
+                        Text(String(format: "%.1f%%", member.mem))
+                            .monospacedDigit().frame(width: ProcCols.mem)
+                        Button("KILL") { model.killProcess(member.id) }
+                            .buttonStyle(.bordered).tint(.red)
+                            .controlSize(.small).frame(width: ProcCols.kill)
+                    }
+                    .font(.system(size: 11))
+                }
+            }
         }
-        .font(.system(size: 12))
     }
 }
 
