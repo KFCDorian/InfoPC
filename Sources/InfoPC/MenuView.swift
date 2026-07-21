@@ -148,10 +148,12 @@ struct MenuView: View {
                 // Usage réel du compte (endpoint OAuth /usage)
                 limitBar(title: "Session (5 h)",
                          percent: live.fiveHourPercent,
-                         resetsAt: live.fiveHourResetsAt)
-                limitBar(title: "Semaine",
+                         resetsAt: live.fiveHourResetsAt,
+                         showDate: false)
+                limitBar(title: "Semaine (7 j)",
                          percent: live.sevenDayPercent,
-                         resetsAt: live.sevenDayResetsAt)
+                         resetsAt: live.sevenDayResetsAt,
+                         showDate: true)
             } else if let c = model.claude, c.isActive {
                 // Repli : estimation locale rapportée au plus gros bloc historique
                 let fraction = min(1.0, Double(c.tokens) / Double(model.claudeLimit))
@@ -170,13 +172,16 @@ struct MenuView: View {
     }
 
     /// Une barre de limite réelle : titre, jauge remplie au pourcentage, % et reset.
-    private func limitBar(title: String, percent: Double, resetsAt: Date?) -> some View {
+    private func limitBar(title: String, percent: Double, resetsAt: Date?, showDate: Bool) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Text(title).font(.caption)
                 Spacer()
                 if let r = resetsAt {
-                    Text("réinit. \(r.formatted(date: .omitted, time: .shortened))")
+                    let reset = showDate
+                        ? r.formatted(date: .abbreviated, time: .shortened)
+                        : r.formatted(date: .omitted, time: .shortened)
+                    Text("réinit. \(reset)")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
                 Text(String(format: "%.0f %%", percent))
@@ -228,16 +233,15 @@ struct ProcessRow: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            // Logo du processus, teinté à la couleur d'accentuation système
-            Group {
-                if let icon = proc.icon {
-                    Image(nsImage: icon).renderingMode(.template).resizable()
-                } else {
-                    Image(systemName: "gearshape.fill").renderingMode(.template).resizable()
-                }
+            // Vrai logo du processus (icône couleur de l'app)
+            if let icon = proc.icon {
+                Image(nsImage: icon).resizable()
+                    .frame(width: 18, height: 18)
+            } else {
+                Image(systemName: "gearshape.fill")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 18, height: 18)
             }
-            .foregroundStyle(Color.accentColor)
-            .frame(width: 18, height: 18)
             Text(proc.name)
                 .lineLimit(1).truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)
