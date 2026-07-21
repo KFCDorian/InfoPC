@@ -311,6 +311,12 @@ struct MenuView: View {
                          percent: live.sevenDayPercent,
                          resetsAt: live.sevenDayResetsAt,
                          showDate: true)
+                if let name = live.modelName, let pct = live.modelPercent {
+                    limitBar(title: "\(name) (semaine)",
+                             percent: pct,
+                             resetsAt: live.modelResetsAt,
+                             showDate: true)
+                }
             } else if let c = model.claude, c.isActive {
                 // Repli : estimation locale rapportée au plus gros bloc historique
                 let fraction = min(1.0, Double(c.tokens) / Double(model.claudeLimit))

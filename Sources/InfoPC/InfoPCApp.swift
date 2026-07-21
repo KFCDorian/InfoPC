@@ -41,6 +41,9 @@ struct InfoPCApp: App {
             Task.detached {
                 if let live = await ClaudeUsageAPI.fetch() {
                     print("API /usage : 5h=\(live.fiveHourPercent)% (reset \(live.fiveHourResetsAt?.description ?? "?")), semaine=\(live.sevenDayPercent)%")
+                    if let n = live.modelName, let p = live.modelPercent {
+                        print("  Limite modèle \(n) : \(p)% (reset \(live.modelResetsAt?.description ?? "?"))")
+                    }
                 } else {
                     print("API /usage : indisponible (token absent/expiré ou réseau)")
                 }

@@ -9,6 +9,10 @@ struct ClaudeLiveUsage {
     let fiveHourResetsAt: Date?
     let sevenDayPercent: Double
     let sevenDayResetsAt: Date?
+    /// Limite hebdomadaire spécifique au modèle en cours (ex. « Fable »).
+    let modelName: String?
+    let modelPercent: Double?
+    let modelResetsAt: Date?
 }
 
 enum ClaudeUsageAPI {
@@ -41,18 +45,36 @@ enum ClaudeUsageAPI {
         let utilization: Double?
         let resets_at: String?
     }
+    private struct LimitEntry: Decodable {
+        let kind: String?
+        let percent: Double?
+        let resets_at: String?
+        let scope: Scope?
+        struct Scope: Decodable {
+            let model: Model?
+            struct Model: Decodable { let display_name: String? }
+        }
+    }
     private struct Payload: Decodable {
         let five_hour: Window?
         let seven_day: Window?
+        let limits: [LimitEntry]?
     }
 
     private static func decode(_ data: Data) -> ClaudeLiveUsage? {
         guard let p = try? JSONDecoder().decode(Payload.self, from: data) else { return nil }
+        // Limite hebdomadaire propre au modèle (ex. « Fable »)
+        let scoped = p.limits?.first {
+            $0.kind == "weekly_scoped" && $0.scope?.model?.display_name != nil
+        }
         return ClaudeLiveUsage(
             fiveHourPercent: p.five_hour?.utilization ?? 0,
             fiveHourResetsAt: parseDate(p.five_hour?.resets_at),
             sevenDayPercent: p.seven_day?.utilization ?? 0,
-            sevenDayResetsAt: parseDate(p.seven_day?.resets_at))
+            sevenDayResetsAt: parseDate(p.seven_day?.resets_at),
+            modelName: scoped?.scope?.model?.display_name,
+            modelPercent: scoped?.percent,
+            modelResetsAt: parseDate(scoped?.resets_at))
     }
 
     private static func parseDate(_ s: String?) -> Date? {
