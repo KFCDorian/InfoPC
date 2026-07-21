@@ -136,7 +136,8 @@ final class StatsModel: ObservableObject {
         refreshClaudeMax()
         refreshClaudeLive()
 
-        fastTimer = Timer(timeInterval: 2.0, repeats: true) { [weak self] _ in
+        // Rafraîchissement capteurs toutes les 3 s (au lieu de 2 s).
+        fastTimer = Timer(timeInterval: 3.0, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refreshFast() }
         }
         // Processus toutes les 10 s ; Claude toutes les 60 s ; max historique / 10 min.
@@ -226,16 +227,21 @@ final class StatsModel: ObservableObject {
         }
     }
 
+    private var fastTick = 0
+
     private func refreshFast() {
+        fastTick += 1
         let sample = cpuSampler.sample()
         cpuUsage = sample?.overall
         cpuPerCore = sample?.perCore ?? cpuPerCore
-        gpuUsage = SystemStats.gpuUsage()
+        // GPU (scan IORegistry coûteux) : 1 fois sur 2, soit ~6 s.
+        if fastTick % 2 == 0 { gpuUsage = SystemStats.gpuUsage() }
         memory = SystemStats.memoryUsage()
         cpuTemp = sensors?.cpuTemp
         gpuTemp = sensors?.gpuTemp
         power = try? smc?.readNumber("PSTR")
-        disk = SystemStats.diskUsage()
+        // Disque (change lentement) : ~1 fois sur 4, soit ~12 s.
+        if fastTick % 4 == 1 { disk = SystemStats.diskUsage() }
         network = netSampler.sample() ?? network
 
         if let smc {
@@ -278,6 +284,13 @@ final class StatsModel: ObservableObject {
             gauges.append(.init(label: "CPU", fraction: (cpuUsage ?? 0) / 100))
         }
 
+        // On ne redessine l'image que si l'affichage a réellement changé
+        // (les jauges sont arrondies à l'entier). Évite un rendu SwiftUI inutile.
+        let signature = (tempStr ?? "-") + "|" + (net ?? "-") + "|"
+            + gauges.map { "\($0.label)\(Int(($0.fraction * 100).rounded()))" }.joined(separator: ",")
+        guard signature != lastMenuSignature else { return }
+        lastMenuSignature = signature
+
         let view = MenuBarGaugesView(temperature: tempStr, network: net, gauges: gauges)
         let renderer = ImageRenderer(content: view)
         renderer.scale = NSScreen.main?.backingScaleFactor ?? 2
@@ -286,6 +299,7 @@ final class StatsModel: ObservableObject {
             menuBarImage = image
         }
     }
+    private var lastMenuSignature = ""
 
     func setFanSpeed(_ index: Int, rpm: Double) {
         if FanController.setSpeed(index, rpm: rpm) {
