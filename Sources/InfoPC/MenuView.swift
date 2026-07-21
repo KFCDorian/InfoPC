@@ -6,6 +6,8 @@ struct MenuView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            headerBar
+            Divider()
             processorSection
             Divider()
             memorySection
@@ -18,12 +20,50 @@ struct MenuView: View {
             Divider()
             claudeSection
             Divider()
-            menuBarCustomization
-            Divider()
             footer
         }
         .padding(14)
         .frame(width: 380)
+    }
+
+    // MARK: - En-tête + réglages
+
+    private var headerBar: some View {
+        HStack {
+            Image(systemName: "gauge.with.dots.needle.67percent")
+            Text("InfoPC").bold()
+            Spacer()
+            settingsMenu
+        }
+    }
+
+    /// Menu engrenage regroupant les réglages d'interface (barre de menus).
+    private var settingsMenu: some View {
+        Menu {
+            Section("Afficher dans la barre") {
+                ForEach(MenuBarItem.allCases) { item in
+                    Toggle(item.label, isOn: Binding(
+                        get: { model.menuBarItems.contains(item) },
+                        set: { on in
+                            if on { model.menuBarItems.insert(item) }
+                            else { model.menuBarItems.remove(item) }
+                        }))
+                }
+            }
+            Section("Température de la barre") {
+                Picker("Capteur", selection: Binding(
+                    get: { model.tempSource },
+                    set: { model.tempSource = $0 })) {
+                    Text("CPU").tag(TempSource.cpu)
+                    Text("GPU").tag(TempSource.gpu)
+                }
+            }
+        } label: {
+            Image(systemName: "gearshape")
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
     }
 
     // MARK: - CPU / GPU
@@ -43,7 +83,6 @@ struct MenuView: View {
                     Text(String(format: "%.1f W", w)).monospacedDigit().foregroundStyle(.secondary)
                 }
             }
-            tempSelector
         }
     }
 
@@ -66,23 +105,6 @@ struct MenuView: View {
                     .font(.caption2).foregroundStyle(.tertiary)
             }
         }
-    }
-
-    /// Choix du capteur dont la température s'affiche dans la barre de menus.
-    /// Les deux cases sont mutuellement exclusives.
-    private var tempSelector: some View {
-        HStack(spacing: 12) {
-            Text("Température barre :").font(.caption).foregroundStyle(.secondary)
-            Toggle("CPU", isOn: Binding(
-                get: { model.tempSource == .cpu },
-                set: { if $0 { model.tempSource = .cpu } }))
-            Toggle("GPU", isOn: Binding(
-                get: { model.tempSource == .gpu },
-                set: { if $0 { model.tempSource = .gpu } }))
-            Spacer()
-        }
-        .toggleStyle(.checkbox)
-        .font(.caption)
     }
 
     private func statRow(icon: String, label: String, usage: Double?, temp: Double?) -> some View {
@@ -184,31 +206,6 @@ struct MenuView: View {
                 }
                 Spacer()
             }
-        }
-    }
-
-    // MARK: - Personnalisation de la barre
-
-    private var menuBarCustomization: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Image(systemName: "menubar.rectangle").frame(width: 18)
-                Text("Afficher dans la barre").bold()
-            }
-            // Cases à cocher pour chaque élément
-            let cols = [GridItem(.adaptive(minimum: 110), alignment: .leading)]
-            LazyVGrid(columns: cols, alignment: .leading, spacing: 2) {
-                ForEach(MenuBarItem.allCases) { item in
-                    Toggle(item.label, isOn: Binding(
-                        get: { model.menuBarItems.contains(item) },
-                        set: { on in
-                            if on { model.menuBarItems.insert(item) }
-                            else { model.menuBarItems.remove(item) }
-                        }))
-                }
-            }
-            .toggleStyle(.checkbox)
-            .font(.caption)
         }
     }
 
