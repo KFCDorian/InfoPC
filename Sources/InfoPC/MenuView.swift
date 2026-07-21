@@ -248,6 +248,7 @@ struct MenuView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text("CPU").font(.caption2).foregroundStyle(.secondary).frame(width: ProcCols.cpu)
                     Text("GPU").font(.caption2).foregroundStyle(.secondary).frame(width: ProcCols.gpu)
+                        .help("L'usage GPU par processus n'est pas exposé par macOS")
                     Text("Mém").font(.caption2).foregroundStyle(.secondary).frame(width: ProcCols.mem)
                     Text("").frame(width: ProcCols.kill)
                 }
@@ -436,6 +437,7 @@ struct ProcGroupRow: View {
                 Text(String(format: "%.0f%%", group.cpu))
                     .monospacedDigit().frame(width: ProcCols.cpu)
                 Text("—").foregroundStyle(.tertiary).frame(width: ProcCols.gpu)
+                    .help("L'usage GPU par processus n'est pas exposé par macOS")
                 Text(String(format: "%.1f%%", group.mem))
                     .monospacedDigit().frame(width: ProcCols.mem)
 
@@ -456,6 +458,7 @@ struct ProcGroupRow: View {
                         Text(String(format: "%.0f%%", member.cpu))
                             .monospacedDigit().frame(width: ProcCols.cpu)
                         Text("—").foregroundStyle(.tertiary).frame(width: ProcCols.gpu)
+                    .help("L'usage GPU par processus n'est pas exposé par macOS")
                         Text(String(format: "%.1f%%", member.mem))
                             .monospacedDigit().frame(width: ProcCols.mem)
                         Button("KILL") { model.killProcess(member.id) }
