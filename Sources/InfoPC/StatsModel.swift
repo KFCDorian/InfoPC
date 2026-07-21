@@ -157,8 +157,33 @@ final class StatsModel: ObservableObject {
     private var tick = 0
     private var claudeMax = 0
 
+    /// Critère de tri de la liste des processus.
+    @Published var procSort: ProcSortKey = .cpu {
+        didSet { refreshProcesses() }
+    }
+
+    /// État du speed test de la connexion.
+    enum SpeedState: Equatable {
+        case idle, running
+        case done(down: Double, up: Double?)
+        case failed
+    }
+    @Published var speedState: SpeedState = .idle
+
+    func runSpeedTest() {
+        guard speedState != .running else { return }
+        speedState = .running
+        Task {
+            let result = await SpeedTest.run()
+            await MainActor.run {
+                if let r = result { self.speedState = .done(down: r.downloadMbps, up: r.uploadMbps) }
+                else { self.speedState = .failed }
+            }
+        }
+    }
+
     private func refreshProcesses() {
-        processes = ProcessSampler.top(8)
+        processes = ProcessSampler.top(8, sortBy: procSort)
     }
 
     func killProcess(_ pid: Int32) {

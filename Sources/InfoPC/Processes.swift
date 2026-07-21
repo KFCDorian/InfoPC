@@ -11,10 +11,17 @@ struct ProcInfo: Identifiable {
     let icon: NSImage?
 }
 
+/// Critère de tri de la liste des processus.
+enum ProcSortKey: String, CaseIterable, Identifiable {
+    case cpu, memory
+    var id: String { rawValue }
+    var label: String { self == .cpu ? "CPU" : "Mémoire" }
+}
+
 enum ProcessSampler {
-    /// Les N processus les plus gourmands (score = CPU + mémoire).
+    /// Les N processus les plus gourmands, triés selon `sortBy`.
     /// GPU par processus non exposé publiquement par macOS → non renseigné ici.
-    static func top(_ limit: Int = 8) -> [ProcInfo] {
+    static func top(_ limit: Int = 8, sortBy: ProcSortKey = .cpu) -> [ProcInfo] {
         guard let raw = runPS() else { return [] }
 
         struct Row { let pid: Int32; let cpu: Double; let mem: Double; let path: String }
@@ -34,13 +41,13 @@ enum ProcessSampler {
         }
 
         let topRows = rows
-            .sorted { ($0.cpu + $0.mem) > ($1.cpu + $1.mem) }
+            .sorted { sortBy == .cpu ? $0.cpu > $1.cpu : $0.mem > $1.mem }
             .prefix(limit)
 
         return topRows.map { row in
             let running = NSRunningApplication(processIdentifier: row.pid)
             let name = running?.localizedName ?? (row.path as NSString).lastPathComponent
-            let icon = resolveIcon(running: running, path: row.path)
+            let icon = resolveIcon(running: running, pid: row.pid, psPath: row.path)
             return ProcInfo(id: row.pid, name: name, cpu: row.cpu, mem: row.mem, icon: icon)
         }
     }
@@ -73,26 +80,39 @@ enum ProcessSampler {
 
     /// Récupère la vraie icône couleur de l'app. Priorité :
     /// 1) app GUI en cours (`NSRunningApplication.icon`) ;
-    /// 2) bundle `.app` déduit du chemin de l'exécutable ;
-    /// 3) icône du fichier exécutable ;
+    /// 2) bundle `.app` déduit du chemin complet (`proc_pidpath`, plus fiable que ps) ;
+    /// 3) `bundleURL` de l'app en cours ;
     /// sinon `nil` (la vue affichera un symbole neutre plutôt qu'une icône noire).
-    private static func resolveIcon(running: NSRunningApplication?, path: String) -> NSImage? {
+    private static func resolveIcon(running: NSRunningApplication?, pid: Int32, psPath: String) -> NSImage? {
         if let icon = running?.icon { return icon }
-        if let cached = iconCache[path] { return cached }
+
+        let fullPath = pidPath(pid) ?? psPath
+        if let cached = iconCache[fullPath] { return cached }
 
         var result: NSImage?
-        if let appPath = appBundlePath(fromExecutable: path) {
+        if let appPath = appBundlePath(fromPath: fullPath) {
             result = NSWorkspace.shared.icon(forFile: appPath)
         } else if let bundle = running?.bundleURL {
             result = NSWorkspace.shared.icon(forFile: bundle.path)
         }
-        if let result { iconCache[path] = result }
+        if let result { iconCache[fullPath] = result }
         return result
     }
 
-    /// `/Applications/Foo.app/Contents/MacOS/Foo` → `/Applications/Foo.app`
-    private static func appBundlePath(fromExecutable path: String) -> String? {
-        guard let range = path.range(of: ".app/Contents/MacOS/") else { return nil }
-        return String(path[..<range.lowerBound]) + ".app"
+    /// Chemin absolu complet d'un processus via libproc (fiable, non tronqué).
+    private static func pidPath(_ pid: Int32) -> String? {
+        var buffer = [CChar](repeating: 0, count: 4096)   // PROC_PIDPATHINFO_MAXSIZE
+        let length = proc_pidpath(pid, &buffer, UInt32(buffer.count))
+        return length > 0 ? String(cString: buffer) : nil
+    }
+
+    /// Remonte au bundle `.app` le plus externe : `/…/Foo.app/Contents/MacOS/Foo`
+    /// → `/…/Foo.app`. Gère aussi les helpers imbriqués (première occurrence).
+    private static func appBundlePath(fromPath path: String) -> String? {
+        if let range = path.range(of: ".app/") {
+            return String(path[..<range.lowerBound]) + ".app"
+        }
+        if path.hasSuffix(".app") { return path }
+        return nil
     }
 }

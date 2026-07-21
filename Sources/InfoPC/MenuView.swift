@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MenuView: View {
     @ObservedObject var model: StatsModel
+    @State private var processesExpanded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -139,20 +140,51 @@ struct MenuView: View {
     // MARK: - Réseau
 
     private var networkSection: some View {
-        HStack {
-            Image(systemName: "network").frame(width: 18)
-            Text("Réseau").bold()
-            Spacer()
-            if let n = model.network {
-                Label(Format.mbps(n.rxBytesPerSec), systemImage: "arrow.down")
-                    .monospacedDigit().foregroundStyle(.secondary)
-                Label(Format.mbps(n.txBytesPerSec), systemImage: "arrow.up")
-                    .monospacedDigit().foregroundStyle(.secondary)
-            } else {
-                Text("–").foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Image(systemName: "network").frame(width: 18)
+                Text("Réseau").bold()
+                Spacer()
+                if let n = model.network {
+                    Label(Format.mbps(n.rxBytesPerSec), systemImage: "arrow.down")
+                        .monospacedDigit().foregroundStyle(.secondary)
+                    Label(Format.mbps(n.txBytesPerSec), systemImage: "arrow.up")
+                        .monospacedDigit().foregroundStyle(.secondary)
+                } else {
+                    Text("–").foregroundStyle(.secondary)
+                }
+            }
+            .font(.callout)
+
+            // Speed test (débit maximal de la connexion)
+            HStack(spacing: 8) {
+                Button {
+                    model.runSpeedTest()
+                } label: {
+                    Label("Speed test", systemImage: "gauge.with.dots.needle.67percent")
+                }
+                .controlSize(.small)
+                .disabled(model.speedState == .running)
+
+                switch model.speedState {
+                case .idle:
+                    EmptyView()
+                case .running:
+                    ProgressView().controlSize(.small)
+                    Text("Test en cours…").font(.caption).foregroundStyle(.secondary)
+                case .done(let down, let up):
+                    Text("↓ \(String(format: "%.0f", down)) Mbps")
+                        .font(.caption).monospacedDigit()
+                    if let up {
+                        Text("↑ \(String(format: "%.0f", up)) Mbps")
+                            .font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                    }
+                case .failed:
+                    Text("Échec du test").font(.caption).foregroundStyle(.red)
+                }
+                Spacer()
             }
         }
-        .font(.callout)
     }
 
     // MARK: - Personnalisation de la barre
@@ -188,24 +220,49 @@ struct MenuView: View {
                 Image(systemName: "list.bullet").frame(width: 18)
                 Text("Processus").bold()
                 Spacer()
-                Text("les plus gourmands").font(.caption).foregroundStyle(.secondary)
-            }
-            // En-têtes de colonnes (le petit tableau : CPU / GPU / Mém au-dessus)
-            HStack(spacing: 6) {
-                Text("").frame(width: 20)
-                Text("Nom").font(.caption2).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text("CPU").font(.caption2).foregroundStyle(.secondary).frame(width: ProcCols.cpu)
-                Text("GPU").font(.caption2).foregroundStyle(.secondary).frame(width: ProcCols.gpu)
-                Text("Mém").font(.caption2).foregroundStyle(.secondary).frame(width: ProcCols.mem)
-                Text("").frame(width: ProcCols.kill)
-            }
-            if model.processes.isEmpty {
-                Text("Chargement…").font(.caption).foregroundStyle(.secondary)
-            } else {
-                ForEach(model.processes) { proc in
-                    ProcessRow(model: model, proc: proc)
+                // Bouton replier / déplier
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) { processesExpanded.toggle() }
+                } label: {
+                    Label(processesExpanded ? "Voir moins" : "Voir plus",
+                          systemImage: processesExpanded ? "chevron.up" : "chevron.down")
                 }
+                .controlSize(.small)
+            }
+
+            if processesExpanded {
+                HStack {
+                    Text("Trier :").font(.caption).foregroundStyle(.secondary)
+                    Picker("Trier", selection: $model.procSort) {
+                        ForEach(ProcSortKey.allCases) { key in
+                            Text(key.label).tag(key)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 160)
+                    Spacer()
+                }
+                // En-têtes de colonnes (le petit tableau : CPU / GPU / Mém au-dessus)
+                HStack(spacing: 6) {
+                    Text("").frame(width: 20)
+                    Text("Nom").font(.caption2).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text("CPU").font(.caption2).foregroundStyle(.secondary).frame(width: ProcCols.cpu)
+                    Text("GPU").font(.caption2).foregroundStyle(.secondary).frame(width: ProcCols.gpu)
+                    Text("Mém").font(.caption2).foregroundStyle(.secondary).frame(width: ProcCols.mem)
+                    Text("").frame(width: ProcCols.kill)
+                }
+                if model.processes.isEmpty {
+                    Text("Chargement…").font(.caption).foregroundStyle(.secondary)
+                } else {
+                    ForEach(model.processes) { proc in
+                        ProcessRow(model: model, proc: proc)
+                    }
+                }
+            } else {
+                Text("\(model.processes.count) processus — trié par \(model.procSort.label)")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
     }
