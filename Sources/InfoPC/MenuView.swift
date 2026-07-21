@@ -256,9 +256,15 @@ struct MenuView: View {
                 if model.processes.isEmpty {
                     Text("Chargement…").font(.caption).foregroundStyle(.secondary)
                 } else {
-                    ForEach(model.processes) { proc in
-                        ProcessRow(model: model, proc: proc)
+                    // Liste défilable pour naviguer parmi tous les processus
+                    ScrollView {
+                        VStack(spacing: 4) {
+                            ForEach(model.processes) { proc in
+                                ProcessRow(model: model, proc: proc)
+                            }
+                        }
                     }
+                    .frame(height: 240)
                 }
             } else {
                 Text("\(model.processes.count) processus — trié par \(model.procSort.label)")

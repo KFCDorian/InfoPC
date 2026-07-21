@@ -183,7 +183,7 @@ final class StatsModel: ObservableObject {
     }
 
     private func refreshProcesses() {
-        processes = ProcessSampler.top(8, sortBy: procSort)
+        processes = ProcessSampler.top(40, sortBy: procSort)
     }
 
     func killProcess(_ pid: Int32) {
