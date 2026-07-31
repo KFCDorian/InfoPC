@@ -28,7 +28,16 @@ struct FanState: Identifiable {
     var current: Double
     var min: Double
     var max: Double
+    /// Consigne lue dans le SMC. En mode auto, elle est écrite par le système :
+    /// c'est elle que doit suivre le curseur pour rester juste.
     var target: Double
+    /// Régime forcé (clé `Fxmd`), relu à chaque rafraîchissement.
+    var manual: Bool
+
+    /// Position à afficher sur le curseur, bornée à la plage du ventilateur.
+    var sliderPosition: Double {
+        Swift.min(Swift.max(target > 0 ? target : current, min), Swift.max(max, min + 1))
+    }
 }
 
 /// Appelle le helper privilégié installé par scripts/install.sh.
@@ -78,6 +87,8 @@ final class StatsModel: ObservableObject {
     @Published var network: NetworkSampler.Throughput?
     @Published var fans: [FanState] = []
     @Published var fanManual: [Int: Bool] = [:]   // index → mode forcé actif
+    /// Message affiché sous les ventilateurs quand une commande n'a pas abouti.
+    @Published var fanNotice: String?
     @Published var claude: ClaudeBlockUsage?
     /// Dénominateur de la jauge Claude locale = plus gros bloc de 5 h historique
     /// (repli si l'API d'usage réelle n'est pas joignable).
@@ -253,13 +264,20 @@ final class StatsModel: ObservableObject {
         if let smc {
             let count = smc.fanCount()
             var states: [FanState] = []
+            var manual: [Int: Bool] = [:]
             for i in 0..<count {
                 if let f = smc.fanInfo(i) {
                     states.append(FanState(id: i, current: f.current,
-                                           min: f.min, max: f.max, target: f.target))
+                                           min: f.min, max: f.max,
+                                           target: f.target, manual: f.manual))
+                    manual[i] = f.manual
                 }
             }
             fans = states
+            // Le mode vient du SMC, pas d'un état supposé côté app : un
+            // ventilateur laissé en forcé par une session précédente (ou par un
+            // autre outil) est ainsi correctement détecté au lancement.
+            if fanManual != manual { fanManual = manual }
         }
 
         renderMenuBar()
@@ -308,14 +326,31 @@ final class StatsModel: ObservableObject {
     private var lastMenuSignature = ""
 
     func setFanSpeed(_ index: Int, rpm: Double) {
-        if FanController.setSpeed(index, rpm: rpm) {
-            fanManual[index] = true
+        guard FanController.setSpeed(index, rpm: rpm) else {
+            fanNotice = "Régime non appliqué — le helper a refusé la commande."
+            return
         }
+        fanNotice = nil
+        resyncFans()
     }
 
     func setFanAuto(_ index: Int) {
-        if FanController.setAuto(index) {
-            fanManual[index] = false
+        guard FanController.setAuto(index) else {
+            fanNotice = "Retour en auto refusé — vérifiez l'installation du helper."
+            return
+        }
+        fanNotice = nil
+        resyncFans()
+    }
+
+    /// Relit l'état réel des ventilateurs juste après une commande, sans
+    /// attendre le tick de 3 s. Le SMC met un instant à recalculer sa consigne
+    /// après un retour en auto : on relit donc une seconde fois peu après.
+    private func resyncFans() {
+        refreshFast()
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(1500))
+            self?.refreshFast()
         }
     }
 

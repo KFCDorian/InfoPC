@@ -291,6 +291,9 @@ struct MenuView: View {
                 Text("Contrôle désactivé — lancez scripts/install.sh pour installer le helper.")
                     .font(.caption).foregroundStyle(.orange)
             }
+            if let notice = model.fanNotice {
+                Text(notice).font(.caption).foregroundStyle(.orange)
+            }
         }
     }
 
@@ -475,27 +478,52 @@ struct ProcGroupRow: View {
 struct FanRow: View {
     @ObservedObject var model: StatsModel
     let fan: FanState
-    @State private var sliderValue: Double = 0
+    /// Consigne en attente de confirmation par le SMC : pendant le glissement,
+    /// puis le court instant qui suit. `nil` → le curseur suit le SMC, ce qui
+    /// est le cas normal en mode auto (le système y écrit lui-même `FxTg`).
+    @State private var pending: Double?
     @State private var dragging = false
+
+    private var displayed: Double { pending ?? fan.sliderPosition }
+
+    private var value: Binding<Double> {
+        Binding(get: { displayed }, set: { pending = $0 })
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Text("Ventilateur \(fan.id + 1)")
+                Text(fan.manual ? "forcé" : "auto")
+                    .font(.caption2)
+                    .foregroundStyle(fan.manual ? .orange : .secondary)
                 Spacer()
-                Text("\(Int(fan.current)) tr/min")
+                // Au repos, le SMC arrête complètement le ventilateur sur
+                // Apple Silicon : « 0 tr/min » se lirait comme une panne.
+                Text(fan.current < 1 ? "à l'arrêt" : "\(Int(fan.current)) tr/min")
                     .monospacedDigit().foregroundStyle(.secondary)
-                if model.fanManual[fan.id] == true {
-                    Button("Auto") { model.setFanAuto(fan.id) }
-                        .font(.caption).buttonStyle(.bordered).controlSize(.small)
+                if fan.manual {
+                    Button("Auto") {
+                        // On relâche l'affichage : le curseur doit repartir sur
+                        // la consigne que le système va reprendre.
+                        pending = nil
+                        model.setFanAuto(fan.id)
+                    }
+                    .font(.caption).buttonStyle(.bordered).controlSize(.small)
                 }
             }
-            Slider(value: $sliderValue,
+            Slider(value: value,
                    in: fan.min...max(fan.max, fan.min + 1),
                    onEditingChanged: { editing in
                        dragging = editing
-                       if !editing {
-                           model.setFanSpeed(fan.id, rpm: sliderValue)
+                       guard !editing else { return }
+                       model.setFanSpeed(fan.id, rpm: displayed)
+                       // Le SMC applique la consigne en un instant ; on rend
+                       // ensuite la main à la valeur relue, pour ne jamais
+                       // afficher une position qui n'est plus la vraie.
+                       Task { @MainActor in
+                           try? await Task.sleep(for: .seconds(2))
+                           if !dragging { pending = nil }
                        }
                    })
             .disabled(!model.helperInstalled)
@@ -503,13 +531,12 @@ struct FanRow: View {
                 Text("\(Int(fan.min))").font(.caption2).foregroundStyle(.tertiary)
                 Spacer()
                 if dragging {
-                    Text("→ \(Int(sliderValue)) tr/min")
+                    Text("→ \(Int(displayed)) tr/min")
                         .font(.caption2).monospacedDigit()
                 }
                 Spacer()
                 Text("\(Int(fan.max))").font(.caption2).foregroundStyle(.tertiary)
             }
         }
-        .onAppear { sliderValue = fan.target > 0 ? fan.target : fan.current }
     }
 }

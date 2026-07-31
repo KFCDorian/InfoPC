@@ -44,7 +44,10 @@ case "auto":
     for i in indices {
         do {
             try smc.setFanAuto(i)
-            print("Ventilateur \(i) → mode auto")
+            // La consigne FxTg est reprise par le SMC : on la relit pour montrer
+            // que le système a bien repris la main.
+            let target = smc.fanInfo(i).map { " (cible système \(Int($0.target)) tr/min)" } ?? ""
+            print("Ventilateur \(i) → mode auto\(target)")
         } catch { die("Échec : \(error)") }
     }
 
@@ -53,7 +56,7 @@ case "status":
     print("\(count) ventilateur(s)")
     for i in 0..<count {
         if let f = smc.fanInfo(i) {
-            print("  #\(i) : \(Int(f.current)) tr/min (min \(Int(f.min)), max \(Int(f.max)), cible \(Int(f.target)))")
+            print("  #\(i) : \(Int(f.current)) tr/min (min \(Int(f.min)), max \(Int(f.max)), cible \(Int(f.target))) — \(f.manual ? "forcé" : "auto")")
         }
     }
 

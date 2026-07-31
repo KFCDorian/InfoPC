@@ -231,7 +231,11 @@ public final class SMC {
         public let current: Double
         public let min: Double
         public let max: Double
+        /// Consigne `FxTg`. En mode auto, c'est le SMC qui l'écrit : elle suit
+        /// donc le régime décidé par le système.
         public let target: Double
+        /// `Fxmd` != 0 : le régime est forcé, le système n'a plus la main.
+        public let manual: Bool
     }
 
     public func fanInfo(_ i: Int) -> FanInfo? {
@@ -239,18 +243,36 @@ public final class SMC {
         let min = (try? readNumber("F\(i)Mn")) ?? 0
         let max = (try? readNumber("F\(i)Mx")) ?? 0
         let target = (try? readNumber("F\(i)Tg")) ?? 0
-        return FanInfo(index: i, current: current, min: min, max: max, target: target)
+        return FanInfo(index: i, current: current, min: min, max: max,
+                       target: target, manual: fanIsManual(i) ?? false)
+    }
+
+    /// Lit le mode du ventilateur : `true` si le régime est forcé.
+    /// `nil` si la clé de mode est illisible (la lecture ne demande pas root).
+    /// Sur Apple Silicon la clé est "F0md" (minuscules), pas "F0Md".
+    public func fanIsManual(_ i: Int) -> Bool? {
+        guard let mode = try? readNumber("F\(i)md") else { return nil }
+        return mode != 0
     }
 
     /// Force un ventilateur à un régime donné (root requis).
-    /// Sur Apple Silicon la clé de mode est "F0md" (minuscules).
+    /// Lève `SMCError` si le mode forcé n'a pas été accepté par le SMC.
     public func setFanSpeed(_ i: Int, rpm: Double) throws {
         try writeUInt8("F\(i)md", 1)
         try writeFloat("F\(i)Tg", Float32(rpm))
+        // L'écriture SMC peut « réussir » sans que le firmware l'applique :
+        // on relit le mode plutôt que de faire confiance au code de retour.
+        if fanIsManual(i) == false {
+            throw SMCError.keyError("F\(i)md", 0)
+        }
     }
 
-    /// Rend le contrôle du ventilateur au système (root requis)
+    /// Rend le contrôle du ventilateur au système (root requis).
+    /// Lève `SMCError` si le SMC n'a pas repris la main.
     public func setFanAuto(_ i: Int) throws {
         try writeUInt8("F\(i)md", 0)
+        if fanIsManual(i) == true {
+            throw SMCError.keyError("F\(i)md", 0)
+        }
     }
 }

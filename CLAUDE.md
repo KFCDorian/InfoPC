@@ -34,7 +34,9 @@ Après modification du code : relancer `./scripts/install.sh --app` (rebuild + r
 ## Spécificités Apple Silicon (testé sur M5, Mac17,2)
 
 - Capteurs temp : clés SMC préfixe `Tp` (CPU) / `Tg` (GPU), type `flt ` (float little-endian). On affiche le capteur le plus chaud.
-- Ventilateurs : `FNum` (nombre), `F0Ac` (RPM actuel), `F0Mn`/`F0Mx` (bornes), `F0Tg` (cible). La clé de mode est `F0md` en **minuscules** (pas `F0Md` comme sur Intel).
+- Ventilateurs : `FNum` (nombre), `F0Ac` (RPM actuel), `F0Mn`/`F0Mx` (bornes), `F0Tg` (cible). La clé de mode est `F0md` en **minuscules** (pas `F0Md` comme sur Intel) : `1` = régime forcé, `0` = le système décide.
+- **En mode auto, c'est le SMC qui écrit `F0Tg`** : la cible suit le régime décidé par le système, il ne faut donc jamais figer le curseur sur la dernière valeur forcée (il doit suivre `F0Tg`). Le mode réel se relit dans `F0md` — sans root — plutôt que de se fier à un état supposé côté app.
+- Machine froide (≈45 °C), le SMC **arrête complètement le ventilateur** : `F0Ac = 0` et `F0Tg = 0`, sous le minimum `F0Mn`. C'est normal sur Apple Silicon, ce n'est pas une panne.
 - L'écriture SMC (contrôle ventilateur) exige root — d'où le helper.
 
 ## Déploiement
