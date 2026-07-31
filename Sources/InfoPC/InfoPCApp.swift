@@ -39,13 +39,25 @@ struct InfoPCApp: App {
             // Usage réel via l'endpoint OAuth (test du chemin Trousseau + réseau)
             let sem = DispatchSemaphore(value: 0)
             Task.detached {
-                if let live = await ClaudeUsageAPI.fetch() {
+                switch await ClaudeUsageAPI.fetchDetailed() {
+                case .success(let live):
                     print("API /usage : 5h=\(live.fiveHourPercent)% (reset \(live.fiveHourResetsAt?.description ?? "?")), semaine=\(live.sevenDayPercent)%")
                     if let n = live.modelName, let p = live.modelPercent {
                         print("  Limite modèle \(n) : \(p)% (reset \(live.modelResetsAt?.description ?? "?"))")
                     }
-                } else {
-                    print("API /usage : indisponible (token absent/expiré ou réseau)")
+                case .noCredentials:
+                    print("API /usage : aucun jeton de compte dans le Trousseau.")
+                    print("  Les entrées « Claude Code-credentials* » présentes ne portent que")
+                    print("  des jetons MCP. Connectez-vous via le CLI (`claude` puis /login)")
+                    print("  pour qu'un jeton lisible y soit écrit.")
+                case .expired(let date):
+                    print("API /usage : jeton expiré le \(date) — reconnectez-vous.")
+                case .http(let code):
+                    print("API /usage : refusée par le serveur (HTTP \(code)).")
+                case .unreachable:
+                    print("API /usage : injoignable (réseau).")
+                case .undecodable:
+                    print("API /usage : réponse illisible (format changé ?).")
                 }
                 sem.signal()
             }
