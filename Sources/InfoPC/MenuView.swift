@@ -311,19 +311,10 @@ struct MenuView: View {
         }) {
             if let live = model.claudeLive {
                 // Usage réel du compte (endpoint OAuth /usage)
-                limitBar(title: "Session (5 h)",
-                         percent: live.fiveHourPercent,
-                         resetsAt: live.fiveHourResetsAt,
-                         showDate: false)
-                limitBar(title: "Semaine (7 j)",
-                         percent: live.sevenDayPercent,
-                         resetsAt: live.sevenDayResetsAt,
-                         showDate: true)
-                if let name = live.modelName, let pct = live.modelPercent {
-                    limitBar(title: "\(name) (semaine)",
-                             percent: pct,
-                             resetsAt: live.modelResetsAt,
-                             showDate: true)
+                limitBar(title: "Session (5 h)", limit: live.fiveHour, showDate: false)
+                limitBar(title: "Semaine (7 j)", limit: live.sevenDay, showDate: true)
+                if let name = live.modelName, let limit = live.model {
+                    limitBar(title: "\(name) (semaine)", limit: limit, showDate: true)
                 }
             } else if let c = model.claude, c.isActive {
                 // Repli : estimation locale rapportée au plus gros bloc historique
@@ -346,23 +337,28 @@ struct MenuView: View {
         }
     }
 
-    /// Une barre de limite réelle : titre, jauge remplie au pourcentage, % et reset.
-    private func limitBar(title: String, percent: Double, resetsAt: Date?, showDate: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+    /// Une barre de limite réelle : titre, jauge remplie au pourcentage, % et
+    /// reset. La couleur suit la gravité annoncée par le serveur.
+    private func limitBar(title: String, limit: ClaudeLimitState, showDate: Bool) -> some View {
+        let level = gaugeLevel(forSeverity: limit.severity, percent: limit.percent)
+        return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Text(title).font(.system(size: 11, weight: .medium))
                 Spacer()
-                if let r = resetsAt {
+                if let r = limit.resetsAt {
                     let reset = showDate
                         ? r.formatted(date: .abbreviated, time: .shortened)
                         : r.formatted(date: .omitted, time: .shortened)
                     Text("réinit. \(reset)")
                         .font(.system(size: 10)).foregroundStyle(.tertiary)
                 }
-                Text(String(format: "%.0f %%", percent))
+                Text(String(format: "%.0f %%", limit.percent))
                     .font(.system(size: 11, weight: .semibold)).monospacedDigit()
+                    // Le chiffre ne se teinte qu'à partir du premier palier
+                    // d'alerte : au repos, la couleur ne signalerait rien.
+                    .foregroundStyle(level == .calm ? Color.primary : level.color)
             }
-            ProgressBar(fraction: percent / 100, color: gaugeColor(forPercent: percent))
+            ProgressBar(fraction: limit.percent / 100, color: level.color)
         }
     }
 

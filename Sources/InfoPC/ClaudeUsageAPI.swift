@@ -5,15 +5,25 @@ import Security
 /// `https://api.anthropic.com/api/oauth/usage` (la source qui alimente la
 /// commande `/usage` de Claude Code). `utilization` est le pourcentage
 /// **réel** consommé sur la limite du plan de l'utilisateur.
+/// État d'une limite : où on en est, quand elle se réarme, et l'avis du
+/// serveur sur la gravité.
+struct ClaudeLimitState {
+    let percent: Double
+    /// `nil` tant que la limite n'est pas entamée : l'API ne date le
+    /// réarmement que des limites actives.
+    let resetsAt: Date?
+    /// `severity` brut renvoyé par le serveur (« normal » est la seule valeur
+    /// observée à ce jour). Conservé tel quel : c'est l'interprétation, pas la
+    /// lecture, qui doit tolérer une valeur inconnue.
+    let severity: String?
+}
+
 struct ClaudeLiveUsage {
-    let fiveHourPercent: Double
-    let fiveHourResetsAt: Date?
-    let sevenDayPercent: Double
-    let sevenDayResetsAt: Date?
+    let fiveHour: ClaudeLimitState
+    let sevenDay: ClaudeLimitState
     /// Limite hebdomadaire spécifique au modèle en cours (ex. « Fable »).
     let modelName: String?
-    let modelPercent: Double?
-    let modelResetsAt: Date?
+    let model: ClaudeLimitState?
 }
 
 enum ClaudeUsageAPI {
@@ -78,6 +88,8 @@ enum ClaudeUsageAPI {
         let kind: String?
         let percent: Double?
         let resets_at: String?
+        /// Avis du serveur sur la gravité — il connaît le plan, nos seuils non.
+        let severity: String?
         let scope: Scope?
         struct Scope: Decodable {
             let model: Model?
@@ -92,18 +104,30 @@ enum ClaudeUsageAPI {
 
     private static func decode(_ data: Data) -> ClaudeLiveUsage? {
         guard let p = try? JSONDecoder().decode(Payload.self, from: data) else { return nil }
+        let limits = p.limits ?? []
+        // Seul `limits` porte la gravité ; les blocs `five_hour`/`seven_day`
+        // donnent les mêmes chiffres et servent de repli si le tableau manque.
+        let session = limits.first { $0.kind == "session" }
+        let weekly = limits.first { $0.kind == "weekly_all" }
         // Limite hebdomadaire propre au modèle (ex. « Fable »)
-        let scoped = p.limits?.first {
+        let scoped = limits.first {
             $0.kind == "weekly_scoped" && $0.scope?.model?.display_name != nil
         }
         return ClaudeLiveUsage(
-            fiveHourPercent: p.five_hour?.utilization ?? 0,
-            fiveHourResetsAt: parseDate(p.five_hour?.resets_at),
-            sevenDayPercent: p.seven_day?.utilization ?? 0,
-            sevenDayResetsAt: parseDate(p.seven_day?.resets_at),
+            fiveHour: ClaudeLimitState(
+                percent: session?.percent ?? p.five_hour?.utilization ?? 0,
+                resetsAt: parseDate(session?.resets_at ?? p.five_hour?.resets_at),
+                severity: session?.severity),
+            sevenDay: ClaudeLimitState(
+                percent: weekly?.percent ?? p.seven_day?.utilization ?? 0,
+                resetsAt: parseDate(weekly?.resets_at ?? p.seven_day?.resets_at),
+                severity: weekly?.severity),
             modelName: scoped?.scope?.model?.display_name,
-            modelPercent: scoped?.percent,
-            modelResetsAt: parseDate(scoped?.resets_at))
+            model: scoped.map {
+                ClaudeLimitState(percent: $0.percent ?? 0,
+                                 resetsAt: parseDate($0.resets_at),
+                                 severity: $0.severity)
+            })
     }
 
     private static func parseDate(_ s: String?) -> Date? {

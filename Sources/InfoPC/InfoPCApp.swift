@@ -41,10 +41,14 @@ struct InfoPCApp: App {
             Task.detached {
                 switch await ClaudeUsageAPI.fetchDetailed() {
                 case .success(let live):
-                    print("API /usage : 5h=\(live.fiveHourPercent)% (reset \(live.fiveHourResetsAt?.description ?? "?")), semaine=\(live.sevenDayPercent)%")
-                    if let n = live.modelName, let p = live.modelPercent {
-                        print("  Limite modèle \(n) : \(p)% (reset \(live.modelResetsAt?.description ?? "?"))")
+                    func line(_ title: String, _ l: ClaudeLimitState) {
+                        print("  \(title) : \(l.percent)% [\(l.severity ?? "gravité absente")]"
+                              + " reset \(l.resetsAt?.description ?? "—")")
                     }
+                    print("API /usage :")
+                    line("5 h    ", live.fiveHour)
+                    line("7 jours", live.sevenDay)
+                    if let n = live.modelName, let l = live.model { line("modèle \(n)", l) }
                 case .noCredentials:
                     print("API /usage : aucun jeton de compte dans le Trousseau.")
                     print("  Les entrées « Claude Code-credentials* » présentes ne portent que")
