@@ -4,14 +4,20 @@
 
 macOS 13+ · Apple Silicon · ~340 Ko · sans dépendance
 
+<p align="center">
+  <img src="docs/menubar.png" width="394"
+       alt="Barre de menus macOS : température, puis les jauges CPU, GPU et RAM">
+</p>
+
 InfoPC affiche l'usage et la température du CPU et du GPU directement dans la barre
 de menus, et ouvre un panneau détaillé au clic : cœurs P/E un par un, mémoire,
 disque, réseau, processus les plus gourmands — et surtout **le régime réel des
 ventilateurs, avec un curseur pour le forcer**, ce que macOS n'expose nulle part.
 
-<!-- Captures : voir docs/ -->
-![Barre de menus](docs/menubar.png)
-![Panneau](docs/popover.png)
+<p align="center">
+  <img src="docs/popover.png" width="400"
+       alt="Le panneau d'InfoPC : processeur avec les cœurs un par un, mémoire et disque, réseau, processus, ventilateurs, limites Claude">
+</p>
 
 ## Ce que ça fait
 
