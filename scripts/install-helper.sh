@@ -19,11 +19,33 @@ fi
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # Depuis le bundle : Contents/Resources → Contents/MacOS. Depuis le dépôt :
 # scripts/ → .build/release.
-for candidate in "$HERE/../MacOS/infopc-fanctl" "$HERE/../.build/release/fanctl"; do
-    if [[ -x "$candidate" ]]; then SOURCE="$candidate"; break; fi
-done
-if [[ -z "${SOURCE:-}" ]]; then
+SOURCE=""
+FROM_BUNDLE=0
+if [[ -x "$HERE/../MacOS/infopc-fanctl" ]]; then
+    SOURCE="$HERE/../MacOS/infopc-fanctl"
+    FROM_BUNDLE=1
+elif [[ -x "$HERE/../.build/release/fanctl" ]]; then
+    SOURCE="$HERE/../.build/release/fanctl"
+fi
+if [[ -z "$SOURCE" ]]; then
     echo "Binaire fanctl introuvable." >&2
+    exit 1
+fi
+
+# Ce qu'on s'apprête à copier deviendra exécutable en root sans mot de passe :
+# un lien symbolique ferait installer tout autre chose que ce qu'on croit lire.
+if [[ -L "$SOURCE" ]]; then
+    echo "Refus : $SOURCE est un lien symbolique." >&2
+    exit 1
+fi
+
+# Le bundle vit dans un dossier où le compte de l'utilisateur écrit : vérifier
+# le sceau détecte une substitution grossière du binaire. Ce n'est pas une
+# preuve d'origine — la signature est ad-hoc, n'importe qui peut en reposer une
+# (seule la notarisation Developer ID le garantirait) — mais ça ne coûte rien.
+if (( FROM_BUNDLE )) && ! codesign --verify --strict "$SOURCE" 2>/dev/null; then
+    echo "Refus : la signature de $SOURCE est invalide ou absente." >&2
+    echo "Réinstallez InfoPC depuis une source de confiance." >&2
     exit 1
 fi
 

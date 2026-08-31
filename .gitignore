@@ -4,8 +4,5 @@
 .DS_Store
 dist/
 
-# Pages web sauvegardées à la racine : rien à voir avec le projet, et le dépôt
-# est public — ne pas les emporter dans un « git add -A ».
-/cr.html
-/dev.html
-/mh.html
+# Le dépôt est public : rien qui ne soit destiné à être lu.
+*.html

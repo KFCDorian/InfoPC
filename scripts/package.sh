@@ -16,6 +16,10 @@ mkdir -p "$DIST"
 # étendus et la signature du bundle.
 ditto -c -k --sequesterRsrc --keepParent "$DIST/InfoPC.app" "$ZIP"
 
+# L'empreinte accompagne l'archive : sans notarisation, c'est le seul moyen
+# pour qui télécharge de vérifier qu'il a bien le fichier publié.
+( cd "$DIST" && shasum -a 256 "$(basename "$ZIP")" > SHA256SUMS )
+
 echo
 echo "Archive : $ZIP  ($(du -h "$ZIP" | cut -f1))"
-echo "SHA-256 : $(shasum -a 256 "$ZIP" | cut -d' ' -f1)"
+echo "SHA-256 : $(cut -d' ' -f1 "$DIST/SHA256SUMS")"

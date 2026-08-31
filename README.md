@@ -58,7 +58,15 @@ de passer outre :
 - `xattr -dr com.apple.quarantine /Applications/InfoPC.app`
 
 C'est le prix d'une app gratuite non notarisée — vous pouvez lire tout le code de
-ce dépôt avant de lui faire confiance.
+ce dépôt avant de lui faire confiance. Pour vérifier que vous avez bien le
+fichier publié :
+
+```bash
+shasum -a 256 InfoPC-1.2.1.zip   # doit correspondre au SHA-256 des notes de release
+```
+
+Ce que l'app obtient sur votre machine, ce que fait le helper privilégié et
+comment signaler une faille : [SECURITY.md](SECURITY.md).
 
 ### Depuis les sources
 
