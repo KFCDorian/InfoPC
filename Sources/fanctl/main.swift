@@ -41,6 +41,11 @@ case "auto":
         ? Array(0..<smc.fanCount())
         : Int(args[2]).map { [$0] } ?? []
     guard !indices.isEmpty else { die("Index invalide") }
+    // Même exigence que `set` : on n'écrit que dans un ventilateur qui existe.
+    // Ce binaire tourne en root, un index inventé n'a rien à y faire.
+    for i in indices where smc.fanInfo(i) == nil {
+        die("Ventilateur \(i) introuvable")
+    }
     for i in indices {
         do {
             try smc.setFanAuto(i)

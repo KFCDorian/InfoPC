@@ -59,6 +59,15 @@ Après modification du code : relancer `./scripts/install.sh --app` (rebuild + r
   thread principal : la saisie du mot de passe ne doit pas figer l'UI). Le script
   valide sa règle avec `visudo -cq` avant de la poser — un sudoers cassé rendrait
   `sudo` inutilisable sur la machine.
+- **Où vit le helper, et pourquoi** : `/Library/PrivilegedHelperTools/com.kfcdorian.infopc.fanctl`
+  depuis la 1.2.0. Un binaire que sudo lance en root **sans mot de passe** ne doit
+  être remplaçable que par root ; `/usr/local/bin` (utilisé jusqu'en 1.1.0) ne
+  l'assure pas — Homebrew se l'approprie couramment, et n'importe quel programme
+  tournant sous le compte de l'utilisateur y obtenait alors root. L'installateur
+  remonte tous les répertoires du chemin et **refuse** si l'un d'eux n'appartient
+  pas à root ou est modifiable par le groupe. La règle sudoers vise le compte
+  installateur (`$SUDO_USER`), pas `%admin` : sur un Mac partagé, les autres
+  administrateurs n'en héritent pas.
 - Démarrage auto : LaunchAgent `~/Library/LaunchAgents/com.kfcdorian.infopc.plist` (RunAtLoad + KeepAlive sauf sortie propre).
   **Une installation Homebrew n'en pose pas** : l'app se lance à la main ou via les
   éléments d'ouverture.

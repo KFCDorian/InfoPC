@@ -79,15 +79,18 @@ ce droit.
 Au premier clic sur **« Activer le contrôle des ventilateurs »** dans le panneau,
 macOS demande votre mot de passe une fois, puis :
 
-- `/usr/local/bin/infopc-fanctl` est installé (le binaire est fourni dans l'app) ;
-- `/etc/sudoers.d/infopc` reçoit une règle **limitée à ce seul binaire** :
-  `%admin ALL=(root) NOPASSWD: /usr/local/bin/infopc-fanctl`.
+- le binaire est installé dans `/Library/PrivilegedHelperTools/com.kfcdorian.infopc.fanctl`,
+  répertoire que macOS garde à `root:wheel` — un programme tournant sous votre
+  compte ne peut donc pas le remplacer ;
+- `/etc/sudoers.d/infopc` reçoit une règle **limitée à ce seul binaire et à votre
+  compte** : `<vous> ALL=(root) NOPASSWD: /Library/PrivilegedHelperTools/com.kfcdorian.infopc.fanctl`.
 
-L'app ne gagne aucun autre pouvoir, et la règle est validée par `visudo` avant
-d'être posée. Pour tout retirer sans désinstaller l'app :
+L'app ne gagne aucun autre pouvoir. La règle est validée par `visudo` avant
+d'être posée, et l'installation refuse de continuer si un répertoire du chemin
+n'appartient pas à root. Pour tout retirer sans désinstaller l'app :
 
 ```bash
-sudo rm -f /usr/local/bin/infopc-fanctl /etc/sudoers.d/infopc
+sudo rm -f /Library/PrivilegedHelperTools/com.kfcdorian.infopc.fanctl /etc/sudoers.d/infopc
 ```
 
 Sans ce helper, InfoPC fonctionne en lecture seule : vous voyez les tr/min, vous
@@ -115,9 +118,18 @@ déposé dans le Trousseau : connectez-vous une fois avec le CLI `claude`.
 
 ## Vie privée
 
-Aucune télémétrie, aucun compte, aucun réseau — à la seule exception de l'appel
-à `api.anthropic.com` décrit ci-dessus, qui n'a lieu que si un jeton Claude Code
-est présent sur la machine.
+Aucune télémétrie, aucun compte, aucune analyse d'usage. InfoPC ne contacte le
+réseau que dans deux cas, tous deux visibles :
+
+- **`api.anthropic.com`**, pour les limites Claude, uniquement si un jeton Claude
+  Code est présent sur la machine. Le jeton est lu dans le Trousseau à chaque
+  appel, jamais écrit sur disque ni journalisé.
+- **`speed.cloudflare.com`**, seulement quand vous cliquez sur **Speed test** :
+  la mesure télécharge puis téléverse quelques mégaoctets, et votre adresse IP
+  est donc vue par Cloudflare, comme pour n'importe quel test de débit.
+
+Tout le reste — capteurs, ventilateurs, processus, lecture de `~/.claude/projects`
+pour l'estimation locale — ne quitte jamais votre machine.
 
 ## Désinstallation
 

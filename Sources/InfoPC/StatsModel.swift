@@ -43,7 +43,10 @@ struct FanState: Identifiable {
 /// Appelle le helper privilégié installé par scripts/install.sh.
 /// La règle NOPASSWD de /etc/sudoers.d/infopc permet `sudo -n` sans mot de passe.
 enum FanController {
-    static let helperPath = "/usr/local/bin/infopc-fanctl"
+    /// Répertoire que macOS maintient à root:wheel : un binaire lancé en root
+    /// sans mot de passe ne doit être remplaçable que par root. /usr/local/bin,
+    /// utilisé jusqu'en 1.1.0, ne l'assure pas (Homebrew se l'approprie souvent).
+    static let helperPath = "/Library/PrivilegedHelperTools/com.kfcdorian.infopc.fanctl"
 
     static var isInstalled: Bool {
         FileManager.default.isExecutableFile(atPath: helperPath)
