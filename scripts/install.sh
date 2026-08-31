@@ -10,36 +10,11 @@ APP="$HOME/Applications/InfoPC.app"
 PLIST="$HOME/Library/LaunchAgents/com.kfcdorian.infopc.plist"
 BUNDLE_ID="com.kfcdorian.infopc"
 
-echo "▸ Compilation (release)…"
-swift build -c release
-
-echo "▸ Création du bundle $APP"
-mkdir -p "$APP/Contents/MacOS"
-cp .build/release/InfoPC "$APP/Contents/MacOS/InfoPC"
-cat > "$APP/Contents/Info.plist" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleIdentifier</key><string>${BUNDLE_ID}</string>
-    <key>CFBundleName</key><string>InfoPC</string>
-    <key>CFBundleExecutable</key><string>InfoPC</string>
-    <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>1.0</string>
-    <key>LSMinimumSystemVersion</key><string>13.0</string>
-    <key>LSUIElement</key><true/>
-    <key>NSHighResolutionCapable</key><true/>
-</dict>
-</plist>
-EOF
-codesign --force --sign - "$APP"
+"$PROJECT_DIR/scripts/make-bundle.sh" "$APP"
 
 if [[ "${1:-}" != "--app" ]]; then
     echo "▸ Installation du helper ventilateurs (sudo requis)…"
-    sudo install -m 755 .build/release/fanctl /usr/local/bin/infopc-fanctl
-    echo "%admin ALL=(root) NOPASSWD: /usr/local/bin/infopc-fanctl" | sudo tee /etc/sudoers.d/infopc > /dev/null
-    sudo chmod 440 /etc/sudoers.d/infopc
-    echo "  Helper installé : /usr/local/bin/infopc-fanctl"
+    sudo "$APP/Contents/Resources/install-helper.sh"
 fi
 
 echo "▸ Configuration du démarrage automatique…"

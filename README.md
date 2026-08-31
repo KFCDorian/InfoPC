@@ -1,34 +1,147 @@
 # InfoPC
 
-Moniteur système dans la barre de menus macOS, pensé pour MacBook Apple Silicon.
+**Moniteur système et contrôle des ventilateurs dans la barre de menus, pour Mac Apple Silicon.**
 
-**Dans la barre de menus** : `C 42% 55°  G 12% 44°` (usage + température CPU/GPU, mis à jour toutes les 2 s).
+macOS 13+ · Apple Silicon · ~340 Ko · sans dépendance
 
-**Dans le popover** :
+InfoPC affiche l'usage et la température du CPU et du GPU directement dans la barre
+de menus, et ouvre un panneau détaillé au clic : cœurs P/E un par un, mémoire,
+disque, réseau, processus les plus gourmands — et surtout **le régime réel des
+ventilateurs, avec un curseur pour le forcer**, ce que macOS n'expose nulle part.
 
-- **CPU / GPU** — usage %, température (capteur le plus chaud), barres colorées (vert / orange / rouge)
-- **Mémoire** — RAM utilisée / totale avec barre
-- **Ventilateurs** — nombre détecté, ventilateurs actifs, RPM en direct, **slider de contrôle** (min→max) et retour au mode **Auto**
-- **Limites Claude** — **usage réel du compte** (session 5 h et semaine) avec pourcentage et heure de réinitialisation, via l'endpoint OAuth `/usage` de Claude Code (le même que la commande `/usage`)
+<!-- Captures : voir docs/ -->
+![Barre de menus](docs/menubar.png)
+![Panneau](docs/popover.png)
+
+## Ce que ça fait
+
+| | |
+|---|---|
+| **CPU** | usage global et **par cœur logique** (P et E distingués), température (capteur le plus chaud), puissance système |
+| **GPU** | usage et température |
+| **Mémoire** | utilisée / totale |
+| **Disque / réseau** | espace libre, débits montant et descendant en direct |
+| **Ventilateurs** | nombre, régime en tr/min, bornes min/max, **curseur de contrôle** et retour au mode Auto |
+| **Processus** | top consommateurs regroupés par application, avec bouton KILL |
+| **Limites Claude** | usage du compte Claude Code — *fonction expérimentale, voir plus bas* |
+
+La barre de menus est personnalisable : cochez ce que vous voulez y voir
+(CPU, GPU, RAM, réseau, température) dans le menu engrenage du panneau.
 
 ## Installation
 
+### Homebrew (recommandé)
+
 ```bash
-./scripts/install.sh
+brew install --cask kfcdorian/tap/infopc
 ```
 
-Le script compile, installe l'app dans `~/Applications`, configure le **démarrage automatique** (LaunchAgent) et installe le helper de contrôle des ventilateurs (`sudo` demandé une seule fois — règle NOPASSWD ciblée sur `/usr/local/bin/infopc-fanctl` uniquement).
+### Téléchargement direct
 
-Sans contrôle des ventilateurs (pas de sudo) : `./scripts/install.sh --app`
+Récupérez `InfoPC-x.y.z.zip` dans les [releases](https://github.com/KFCDorian/InfoPC/releases),
+décompressez, glissez `InfoPC.app` dans `/Applications`.
+
+L'app est signée en **ad-hoc** (pas de certificat Apple Developer à 99 $/an), donc
+au premier lancement macOS affiche « InfoPC ne peut pas être ouvert ». Deux façons
+de passer outre :
+
+- **clic droit sur l'app → Ouvrir**, puis confirmez ; ou
+- `xattr -dr com.apple.quarantine /Applications/InfoPC.app`
+
+C'est le prix d'une app gratuite non notarisée — vous pouvez lire tout le code de
+ce dépôt avant de lui faire confiance.
+
+### Depuis les sources
+
+```bash
+git clone https://github.com/KFCDorian/InfoPC.git
+cd InfoPC
+./scripts/install.sh          # compile, installe dans ~/Applications, démarrage auto
+./scripts/install.sh --app    # idem, mais sans le helper ventilateurs (aucun sudo)
+```
+
+## Le contrôle des ventilateurs et le mot de passe
+
+Écrire dans le SMC — la puce qui pilote les ventilateurs — **exige les droits
+root**. Aucune app ne peut y couper. InfoPC ne tourne pas en root pour autant :
+elle installe un petit binaire séparé, `infopc-fanctl`, qui est le seul à avoir
+ce droit.
+
+Au premier clic sur **« Activer le contrôle des ventilateurs »** dans le panneau,
+macOS demande votre mot de passe une fois, puis :
+
+- `/usr/local/bin/infopc-fanctl` est installé (le binaire est fourni dans l'app) ;
+- `/etc/sudoers.d/infopc` reçoit une règle **limitée à ce seul binaire** :
+  `%admin ALL=(root) NOPASSWD: /usr/local/bin/infopc-fanctl`.
+
+L'app ne gagne aucun autre pouvoir, et la règle est validée par `visudo` avant
+d'être posée. Pour tout retirer sans désinstaller l'app :
+
+```bash
+sudo rm -f /usr/local/bin/infopc-fanctl /etc/sudoers.d/infopc
+```
+
+Sans ce helper, InfoPC fonctionne en lecture seule : vous voyez les tr/min, vous
+ne pouvez pas les changer.
+
+> **Sur Apple Silicon, un ventilateur à 0 tr/min est normal.** Sous ~45 °C le SMC
+> l'arrête complètement. Ce n'est pas une panne, et le mode **Auto** reste le bon
+> choix par défaut : macOS gère très bien son refroidissement.
+
+## Limites Claude — expérimental
+
+Si vous utilisez Claude Code, le panneau affiche votre consommation réelle
+(session de 5 h, semaine, et modèle en cours) en lisant votre jeton OAuth dans le
+Trousseau et en interrogeant l'endpoint qui alimente la commande `/usage`.
+
+**Cette fonction n'est garantie par rien.** L'endpoint n'est pas documenté :
+Anthropic peut le changer du jour au lendemain et l'affichage cessera de
+fonctionner. Elle est étiquetée « expérimental » dans l'app pour cette raison, et
+le reste d'InfoPC n'en dépend pas. Si le jeton est absent, l'app retombe sur une
+estimation locale calculée depuis `~/.claude/projects`.
+
+Le jeton ne quitte jamais votre machine, sauf vers `api.anthropic.com`. Si vous
+lancez Claude Code depuis l'app Claude pour macOS, aucun jeton lisible n'est
+déposé dans le Trousseau : connectez-vous une fois avec le CLI `claude`.
+
+## Vie privée
+
+Aucune télémétrie, aucun compte, aucun réseau — à la seule exception de l'appel
+à `api.anthropic.com` décrit ci-dessus, qui n'a lieu que si un jeton Claude Code
+est présent sur la machine.
 
 ## Désinstallation
 
 ```bash
-./scripts/uninstall.sh
+./scripts/uninstall.sh              # depuis les sources
+brew uninstall --cask infopc        # depuis Homebrew
 ```
 
-## Notes
+## Limites connues
 
-- Le contrôle des ventilateurs écrit dans le SMC (clés `F0md`/`F0Tg`). Le bouton **Auto** rend la main au système. En cas de doute, laissez le mode Auto : macOS gère très bien ses ventilateurs.
-- Les limites Claude affichées sont les **vraies valeurs de votre compte** : l'app lit votre token OAuth dans le Trousseau (comme le fait Claude Code) et interroge `api.anthropic.com/api/oauth/usage`. Le token ne quitte jamais votre machine, sauf vers Anthropic. Si le token est absent/expiré, l'app retombe sur une estimation locale à partir de `~/.claude/projects`.
-- Testé sur MacBook Pro M5 (macOS 26). Devrait fonctionner sur tout Mac Apple Silicon.
+- **Apple Silicon uniquement.** Les clés SMC des Mac Intel diffèrent (`F0Md` au
+  lieu de `F0md`, capteurs de température différents).
+- **Pas d'usage GPU par processus** : macOS ne l'expose à aucune app, la colonne
+  affiche « — ».
+- Développé et testé sur MacBook Pro **M5** (macOS 26). Les retours sur d'autres
+  puces sont les bienvenus dans les [issues](https://github.com/KFCDorian/InfoPC/issues).
+- Interface en français uniquement pour l'instant.
+
+## Développement
+
+Swift Package pur, sans Xcode.
+
+```bash
+swift build -c release
+./scripts/package.sh              # fabrique dist/InfoPC-<version>.zip + son SHA-256
+./.build/release/fanctl status    # état des ventilateurs
+./.build/release/InfoPC --claude-debug
+```
+
+`Sources/SMCCore` (accès AppleSMC), `Sources/InfoPC` (l'app), `Sources/fanctl`
+(le helper privilégié). Détails d'architecture dans [CLAUDE.md](CLAUDE.md).
+
+## Licence
+
+Pas de licence open source : le code est public pour que vous puissiez
+l'inspecter avant d'installer, tous droits réservés pour l'instant.

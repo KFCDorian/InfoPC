@@ -11,7 +11,11 @@ swift build -c release            # compiler
 ./scripts/uninstall.sh            # tout désinstaller
 ./.build/release/fanctl status    # debug : état des ventilateurs
 ./.build/release/fanctl keys Tp   # debug : lister les clés SMC par préfixe
+./scripts/package.sh              # fabriquer dist/InfoPC-<version>.zip + SHA-256 (release)
 ```
+
+La version publiée vit dans le fichier `VERSION` à la racine (lu par `make-bundle.sh`
+pour `CFBundleShortVersionString`, par `package.sh` pour le nom de l'archive).
 
 Après modification du code : relancer `./scripts/install.sh --app` (rebuild + redéploiement du bundle + relance via launchctl).
 
@@ -43,4 +47,30 @@ Après modification du code : relancer `./scripts/install.sh --app` (rebuild + r
 ## Déploiement
 
 - Bundle : `~/Applications/InfoPC.app` (LSUIElement, pas d'icône Dock), signature ad-hoc.
+  Construit par `scripts/make-bundle.sh <chemin>`, partagé entre l'installation de
+  dev (`install.sh`) et l'archive publique (`package.sh`) — on distribue donc
+  exactement le bundle qu'on utilise.
+- Le bundle **embarque le helper** (`Contents/MacOS/infopc-fanctl`) et son
+  installateur (`Contents/Resources/install-helper.sh`) : une installation par
+  Homebrew ou par glisser-déposer peut ainsi activer le contrôle des ventilateurs
+  sans cloner le dépôt. Le bouton « Activer le contrôle des ventilateurs » du
+  popover lance ce script via `osascript … with administrator privileges` (hors du
+  thread principal : la saisie du mot de passe ne doit pas figer l'UI). Le script
+  valide sa règle avec `visudo -cq` avant de la poser — un sudoers cassé rendrait
+  `sudo` inutilisable sur la machine.
 - Démarrage auto : LaunchAgent `~/Library/LaunchAgents/com.kfcdorian.infopc.plist` (RunAtLoad + KeepAlive sauf sortie propre).
+  **Une installation Homebrew n'en pose pas** : l'app se lance à la main ou via les
+  éléments d'ouverture.
+
+## Distribution
+
+- Releases GitHub : archive `.zip` produite par `ditto` (préserve la signature),
+  signature **ad-hoc** — Gatekeeper avertit au premier lancement, c'est attendu et
+  documenté dans le README (clic droit → Ouvrir, ou `xattr -dr com.apple.quarantine`).
+- Cask Homebrew : dépôt `KFCDorian/homebrew-tap`, `Casks/infopc.rb`. Le `postflight`
+  retire l'attribut de quarantaine, sinon l'app ad-hoc est bloquée après un
+  `brew install --cask`.
+- La fonction **Limites Claude est étiquetée « expérimental » dans l'UI** (badge +
+  infobulle, `MenuView.experimentalNotice`) : elle repose sur un endpoint non
+  documenté et sur le Trousseau, contrairement au reste de l'app. Ne pas la
+  présenter comme une garantie, ici ou dans une future offre payante.
