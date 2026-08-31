@@ -12,13 +12,13 @@ enum TempSource: String {
 enum MenuBarItem: String, CaseIterable, Identifiable {
     case cpu, gpu, ram, network, temperature
     var id: String { rawValue }
-    var label: String {
+    @MainActor var label: String {
         switch self {
         case .cpu: return "CPU"
         case .gpu: return "GPU"
         case .ram: return "RAM"
-        case .network: return "Réseau"
-        case .temperature: return "Température"
+        case .network: return t("Réseau", "Network")
+        case .temperature: return t("Température", "Temperature")
         }
     }
 }
@@ -83,11 +83,9 @@ enum FanController {
     /// Installe le helper en demandant les droits admin via le dialogue système
     /// (osascript). C'est le seul moment où l'app a besoin d'un mot de passe :
     /// ensuite la règle NOPASSWD, ciblée sur ce seul binaire, suffit.
-    /// Renvoie `nil` si tout s'est bien passé, sinon un message à afficher.
-    static func installHelper() -> String? {
-        guard let script = installerPath else {
-            return "Installateur introuvable — lancez scripts/install.sh."
-        }
+    /// Renvoie `nil` si tout s'est bien passé, sinon la raison de l'échec.
+    static func installHelper() -> HelperFailure? {
+        guard let script = installerPath else { return .installerMissing }
         // Le chemin peut contenir des espaces ou une apostrophe : on le quote
         // pour le shell, puis pour la chaîne AppleScript.
         let shellQuoted = "'" + script.replacingOccurrences(of: "'", with: "'\\''") + "'"
@@ -108,9 +106,28 @@ enum FanController {
             let text = String(data: err, encoding: .utf8) ?? ""
             // -128 : l'utilisateur a fermé le dialogue de mot de passe.
             if text.contains("-128") { return nil }
-            return "Installation du helper impossible."
+            return .failed
         } catch {
-            return "Installation du helper impossible."
+            return .failed
+        }
+    }
+}
+
+/// Pourquoi la pose du helper n'a pas abouti. Un cas plutôt qu'un texte :
+/// l'installation tourne hors du thread principal, où la langue n'est pas
+/// lisible ; c'est l'appelant qui met les mots dessus.
+enum HelperFailure {
+    case installerMissing
+    case failed
+
+    @MainActor var message: String {
+        switch self {
+        case .installerMissing:
+            return t("Installateur introuvable — lancez scripts/install.sh.",
+                     "Installer not found — run scripts/install.sh.")
+        case .failed:
+            return t("Installation du helper impossible.",
+                     "Could not install the helper.")
         }
     }
 }
@@ -370,7 +387,8 @@ final class StatsModel: ObservableObject {
 
     func setFanSpeed(_ index: Int, rpm: Double) {
         guard FanController.setSpeed(index, rpm: rpm) else {
-            fanNotice = "Régime non appliqué — le helper a refusé la commande."
+            fanNotice = t("Régime non appliqué — le helper a refusé la commande.",
+                          "Speed not applied — the helper refused the command.")
             return
         }
         fanNotice = nil
@@ -379,7 +397,8 @@ final class StatsModel: ObservableObject {
 
     func setFanAuto(_ index: Int) {
         guard FanController.setAuto(index) else {
-            fanNotice = "Retour en auto refusé — vérifiez l'installation du helper."
+            fanNotice = t("Retour en auto refusé — vérifiez l'installation du helper.",
+                          "Switch back to auto refused — check the helper installation.")
             return
         }
         fanNotice = nil
@@ -391,11 +410,11 @@ final class StatsModel: ObservableObject {
     /// Hors du thread principal : la saisie du mot de passe peut durer, l'UI ne
     /// doit pas se figer pendant ce temps.
     func installFanHelper() {
-        fanNotice = "Installation du helper en cours…"
+        fanNotice = t("Installation du helper en cours…", "Installing the helper…")
         Task { @MainActor [weak self] in
-            let message = await Task.detached { FanController.installHelper() }.value
+            let failure = await Task.detached { FanController.installHelper() }.value
             guard let self else { return }
-            self.fanNotice = message
+            self.fanNotice = failure?.message
             self.helperInstalled = FanController.isInstalled
             if self.helperInstalled { self.resyncFans() }
         }

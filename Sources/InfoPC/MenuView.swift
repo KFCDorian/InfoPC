@@ -2,6 +2,8 @@ import SwiftUI
 
 struct MenuView: View {
     @ObservedObject var model: StatsModel
+    /// Observé pour que tout le popover se retraduise dès la bascule.
+    @ObservedObject private var loc = Localization.shared
     @State private var processesExpanded = false
 
     var body: some View {
@@ -31,7 +33,7 @@ struct MenuView: View {
                             in: RoundedRectangle(cornerRadius: Theme.innerRadius))
             VStack(alignment: .leading, spacing: 0) {
                 Text("InfoPC").font(.system(size: 13, weight: .semibold))
-                Text("Surveillance système")
+                Text(t("Surveillance système", "System monitoring"))
                     .font(.system(size: 10)).foregroundStyle(.secondary)
             }
             Spacer()
@@ -43,7 +45,7 @@ struct MenuView: View {
     /// Menu engrenage regroupant les réglages d'interface (barre de menus).
     private var settingsMenu: some View {
         Menu {
-            Section("Afficher dans la barre") {
+            Section(t("Afficher dans la barre", "Show in menu bar")) {
                 ForEach(MenuBarItem.allCases) { item in
                     Toggle(item.label, isOn: Binding(
                         get: { model.menuBarItems.contains(item) },
@@ -53,12 +55,19 @@ struct MenuView: View {
                         }))
                 }
             }
-            Section("Température de la barre") {
-                Picker("Capteur", selection: Binding(
+            Section(t("Température de la barre", "Menu bar temperature")) {
+                Picker(t("Capteur", "Sensor"), selection: Binding(
                     get: { model.tempSource },
                     set: { model.tempSource = $0 })) {
                     Text("CPU").tag(TempSource.cpu)
                     Text("GPU").tag(TempSource.gpu)
+                }
+            }
+            Section(t("Langue", "Language")) {
+                Picker(t("Langue", "Language"), selection: $loc.language) {
+                    ForEach(AppLanguage.allCases) { choice in
+                        Text(choice.label).tag(choice)
+                    }
                 }
             }
         } label: {
@@ -74,7 +83,7 @@ struct MenuView: View {
     // MARK: - CPU / GPU
 
     private var processorSection: some View {
-        SectionCard("Processeur", icon: "cpu", trailing: {
+        SectionCard(t("Processeur", "Processor"), icon: "cpu", trailing: {
             if let w = model.power {
                 Badge(text: String(format: "%.1f W", w), tint: .yellow)
             }
@@ -110,11 +119,12 @@ struct MenuView: View {
                 HStack(alignment: .bottom, spacing: 3) {
                     ForEach(cores.indices, id: \.self) { i in
                         CoreBar(fraction: cores[i] / 100)
-                            .help("Cœur \(i + 1) : \(Int(cores[i])) %")
+                            .help(t("Cœur \(i + 1) : \(Int(cores[i])) %", "Core \(i + 1): \(Int(cores[i]))%"))
                     }
                     Spacer(minLength: 0)
                 }
-                Text("\(model.performanceCores) performance · \(model.efficiencyCores) efficience")
+                Text(t("\(model.performanceCores) performance · \(model.efficiencyCores) efficience",
+                     "\(model.performanceCores) performance · \(model.efficiencyCores) efficiency"))
                     .font(.system(size: 10)).foregroundStyle(.tertiary)
             }
         }
@@ -123,14 +133,14 @@ struct MenuView: View {
     // MARK: - Mémoire / disque
 
     private var storageSection: some View {
-        SectionCard("Mémoire & stockage", icon: "internaldrive") {
+        SectionCard(t("Mémoire & stockage", "Memory & storage"), icon: "internaldrive") {
             if let mem = model.memory {
-                capacityRow(label: "Mémoire", icon: "memorychip",
+                capacityRow(label: t("Mémoire", "Memory"), icon: "memorychip",
                             used: Format.gib(mem.usedBytes), total: Format.gib(mem.totalBytes),
                             fraction: mem.fraction)
             }
             if let d = model.disk {
-                capacityRow(label: "Disque", icon: "externaldrive",
+                capacityRow(label: t("Disque", "Disk"), icon: "externaldrive",
                             used: Format.gib(d.usedBytes), total: Format.gib(d.totalBytes),
                             fraction: d.fraction)
             }
@@ -145,7 +155,7 @@ struct MenuView: View {
                 Image(systemName: icon).font(.system(size: 10)).foregroundStyle(.secondary)
                 Text(label).font(.system(size: 12, weight: .medium))
                 Spacer()
-                Text("\(used) / \(total) Go")
+                Text("\(used) / \(total) \(t("Go", "GB"))")
                     .font(.system(size: 11)).monospacedDigit().foregroundStyle(.secondary)
             }
             ProgressBar(fraction: fraction, color: gaugeColor(forPercent: fraction * 100))
@@ -155,7 +165,7 @@ struct MenuView: View {
     // MARK: - Réseau
 
     private var networkSection: some View {
-        SectionCard("Réseau", icon: "network", trailing: {
+        SectionCard(t("Réseau", "Network"), icon: "network", trailing: {
             if model.network == nil {
                 Text("–").font(.system(size: 11)).foregroundStyle(.secondary)
             }
@@ -184,14 +194,14 @@ struct MenuView: View {
                     EmptyView()
                 case .running:
                     ProgressView().controlSize(.small)
-                    Text("Test en cours…").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text(t("Test en cours…", "Testing…")).font(.system(size: 11)).foregroundStyle(.secondary)
                 case .done(let down, let up):
                     Badge(text: "↓ \(String(format: "%.0f", down)) Mbps", tint: .accentColor)
                     if let up {
                         Badge(text: "↑ \(String(format: "%.0f", up)) Mbps")
                     }
                 case .failed:
-                    Badge(text: "Échec du test", tint: .red)
+                    Badge(text: t("Échec du test", "Test failed"), tint: .red)
                 }
                 Spacer(minLength: 0)
             }
@@ -212,11 +222,12 @@ struct MenuView: View {
     // MARK: - Processus
 
     private var processesSection: some View {
-        SectionCard("Processus", icon: "list.bullet", trailing: {
+        SectionCard(t("Processus", "Processes"), icon: "list.bullet", trailing: {
             Button {
                 withAnimation(.easeInOut(duration: 0.15)) { processesExpanded.toggle() }
             } label: {
-                Label(processesExpanded ? "Voir moins" : "Voir plus",
+                Label(processesExpanded ? t("Voir moins", "Show less")
+                                        : t("Voir plus", "Show more"),
                       systemImage: processesExpanded ? "chevron.up" : "chevron.down")
                     .font(.system(size: 11))
             }
@@ -224,7 +235,7 @@ struct MenuView: View {
         }) {
             if processesExpanded {
                 HStack(spacing: 8) {
-                    Picker("Trier", selection: $model.procSort) {
+                    Picker(t("Trier", "Sort"), selection: $model.procSort) {
                         ForEach(ProcSortKey.allCases) { key in
                             Text(key.label).tag(key)
                         }
@@ -238,18 +249,19 @@ struct MenuView: View {
                 // En-têtes de colonnes (CPU / GPU / Mém au-dessus du tableau)
                 HStack(spacing: 6) {
                     Text("").frame(width: 32)
-                    Text("Nom").frame(maxWidth: .infinity, alignment: .leading)
+                    Text(t("Nom", "Name")).frame(maxWidth: .infinity, alignment: .leading)
                     Text("CPU").frame(width: ProcCols.cpu)
                     Text("GPU").frame(width: ProcCols.gpu)
-                        .help("L'usage GPU par processus n'est pas exposé par macOS")
-                    Text("Mém").frame(width: ProcCols.mem)
+                        .help(t("L'usage GPU par processus n'est pas exposé par macOS",
+                                "macOS doesn't expose per-process GPU usage"))
+                    Text(t("Mém", "Mem")).frame(width: ProcCols.mem)
                     Text("").frame(width: ProcCols.kill)
                 }
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.tertiary)
 
                 if model.processGroups.isEmpty {
-                    Text("Chargement…").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text(t("Chargement…", "Loading…")).font(.system(size: 11)).foregroundStyle(.secondary)
                 } else {
                     // Liste défilable, groupée par application
                     ScrollView {
@@ -263,7 +275,8 @@ struct MenuView: View {
                     .frame(height: 240)
                 }
             } else {
-                Text("\(model.processGroups.count) applications — triées par \(model.procSort.label)")
+                Text(t("\(model.processGroups.count) applications — triées par \(model.procSort.label)",
+                     "\(model.processGroups.count) apps — sorted by \(model.procSort.label)"))
                     .font(.system(size: 11)).foregroundStyle(.secondary)
             }
         }
@@ -272,24 +285,31 @@ struct MenuView: View {
     // MARK: - Ventilateurs
 
     private var fansSection: some View {
-        SectionCard("Ventilateurs", icon: "fan", trailing: {
-            Badge(text: model.fans.isEmpty ? "aucun détecté"
-                  : "\(model.fans.filter { $0.current > 10 }.count)/\(model.fans.count) actif(s)")
+        SectionCard(t("Ventilateurs", "Fans"), icon: "fan", trailing: {
+            Badge(text: model.fans.isEmpty
+                  ? t("aucun détecté", "none detected")
+                  : t("\(model.fans.filter { $0.current > 10 }.count)/\(model.fans.count) actif(s)",
+                      "\(model.fans.filter { $0.current > 10 }.count)/\(model.fans.count) active"))
         }) {
             ForEach(model.fans) { fan in
                 FanRow(model: model, fan: fan)
             }
             if !model.fans.isEmpty && !model.helperInstalled {
                 VStack(alignment: .leading, spacing: 6) {
-                    notice("Contrôle désactivé : le pilotage des ventilateurs "
-                           + "passe par un helper privilégié.")
-                    Button("Activer le contrôle des ventilateurs…") {
+                    notice(t("Contrôle désactivé : le pilotage des ventilateurs "
+                             + "passe par un helper privilégié.",
+                             "Control disabled: driving the fans goes through a "
+                             + "privileged helper."))
+                    Button(t("Activer le contrôle des ventilateurs…",
+                             "Enable fan control…")) {
                         model.installFanHelper()
                     }
                     .controlSize(.small)
-                    .help("Installe /usr/local/bin/infopc-fanctl et une règle "
-                          + "sudo limitée à ce seul binaire. Mot de passe "
-                          + "demandé une seule fois.")
+                    .help(t("Installe /usr/local/bin/infopc-fanctl et une règle "
+                            + "sudo limitée à ce seul binaire. Mot de passe "
+                            + "demandé une seule fois.",
+                            "Installs /usr/local/bin/infopc-fanctl and a sudo rule "
+                            + "limited to that single binary. Password asked once."))
                 }
             }
             if let text = model.fanNotice {
@@ -315,34 +335,45 @@ struct MenuView: View {
 
     /// Pourquoi cette section porte la mention « expérimental » : elle ne
     /// repose sur aucun contrat public, contrairement au reste de l'app.
-    static let experimentalNotice = """
-        Fonction expérimentale : elle lit le jeton OAuth de Claude Code dans \
-        le Trousseau et interroge un endpoint non documenté d'Anthropic. \
-        Anthropic peut le modifier sans préavis — l'affichage peut alors \
-        cesser de fonctionner. Le reste de l'app (capteurs, ventilateurs) \
-        n'en dépend pas.
-        """
+    static var experimentalNotice: String {
+        t("""
+          Fonction expérimentale : elle lit le jeton OAuth de Claude Code dans \
+          le Trousseau et interroge un endpoint non documenté d'Anthropic. \
+          Anthropic peut le modifier sans préavis — l'affichage peut alors \
+          cesser de fonctionner. Le reste de l'app (capteurs, ventilateurs) \
+          n'en dépend pas.
+          """,
+          """
+          Experimental feature: it reads the Claude Code OAuth token from the \
+          Keychain and calls an undocumented Anthropic endpoint. Anthropic can \
+          change it without notice, and this section would then stop working. \
+          Nothing else in the app depends on it.
+          """)
+    }
 
     private var claudeSection: some View {
-        SectionCard("Limites Claude", icon: "sparkles", trailing: {
+        SectionCard(t("Limites Claude", "Claude limits"), icon: "sparkles", trailing: {
             HStack(spacing: 5) {
                 if model.claudeLive == nil && model.claude != nil {
-                    Badge(text: "estimation locale")
+                    Badge(text: t("estimation locale", "local estimate"))
                 }
                 // Cette section s'appuie sur un endpoint non documenté et sur
                 // le jeton du Trousseau : elle peut cesser de fonctionner sans
                 // préavis. Le dire ici plutôt que de laisser croire à un
                 // affichage garanti comme les capteurs matériels.
-                Badge(text: "expérimental", tint: .orange)
+                Badge(text: t("expérimental", "experimental"), tint: .orange)
                     .help(Self.experimentalNotice)
             }
         }) {
             if let live = model.claudeLive {
                 // Usage réel du compte (endpoint OAuth /usage)
-                limitBar(title: "Session (5 h)", limit: live.fiveHour, showDate: false)
-                limitBar(title: "Semaine (7 j)", limit: live.sevenDay, showDate: true)
+                limitBar(title: t("Session (5 h)", "Session (5 h)"),
+                         limit: live.fiveHour, showDate: false)
+                limitBar(title: t("Semaine (7 j)", "Week (7 d)"),
+                         limit: live.sevenDay, showDate: true)
                 if let name = live.modelName, let limit = live.model {
-                    limitBar(title: "\(name) (semaine)", limit: limit, showDate: true)
+                    limitBar(title: t("\(name) (semaine)", "\(name) (week)"),
+                             limit: limit, showDate: true)
                 }
             } else if let c = model.claude, c.isActive {
                 // Repli : estimation locale rapportée au plus gros bloc historique
@@ -360,11 +391,14 @@ struct MenuView: View {
                 }
             } else {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Usage indisponible")
+                    Text(t("Usage indisponible", "Usage unavailable"))
                         .font(.system(size: 11)).foregroundStyle(.secondary)
-                    Text("Connectez-vous une fois avec le CLI `claude` : "
-                         + "l'app Claude pour macOS ne dépose pas de jeton "
-                         + "lisible dans le Trousseau.")
+                    Text(t("Connectez-vous une fois avec le CLI `claude` : "
+                           + "l'app Claude pour macOS ne dépose pas de jeton "
+                           + "lisible dans le Trousseau.",
+                           "Sign in once with the `claude` CLI: the Claude app "
+                           + "for macOS doesn't store a readable token in the "
+                           + "Keychain."))
                         .font(.system(size: 10)).foregroundStyle(.tertiary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -384,7 +418,7 @@ struct MenuView: View {
                     let reset = showDate
                         ? r.formatted(date: .abbreviated, time: .shortened)
                         : r.formatted(date: .omitted, time: .shortened)
-                    Text("réinit. \(reset)")
+                    Text(t("réinit. \(reset)", "resets \(reset)"))
                         .font(.system(size: 10)).foregroundStyle(.tertiary)
                 }
                 Text(String(format: "%.0f %%", limit.percent))
@@ -402,10 +436,10 @@ struct MenuView: View {
     private var footer: some View {
         HStack {
             if !model.smcAvailable {
-                Badge(text: "SMC indisponible", tint: .red)
+                Badge(text: t("SMC indisponible", "SMC unavailable"), tint: .red)
             }
             Spacer()
-            Button("Quitter") { NSApplication.shared.terminate(nil) }
+            Button(t("Quitter", "Quit")) { NSApplication.shared.terminate(nil) }
                 .controlSize(.small)
         }
         .padding(.horizontal, 2)
@@ -436,6 +470,7 @@ enum ProcCols {
 /// processus individuels.
 struct ProcGroupRow: View {
     @ObservedObject var model: StatsModel
+    @ObservedObject private var loc = Localization.shared
     let group: ProcGroup
     @State private var expanded = false
     @State private var hovering = false
@@ -479,7 +514,8 @@ struct ProcGroupRow: View {
                 Text(String(format: "%.0f%%", group.cpu))
                     .monospacedDigit().frame(width: ProcCols.cpu)
                 Text("—").foregroundStyle(.tertiary).frame(width: ProcCols.gpu)
-                    .help("L'usage GPU par processus n'est pas exposé par macOS")
+                    .help(t("L'usage GPU par processus n'est pas exposé par macOS",
+                                "macOS doesn't expose per-process GPU usage"))
                 Text(String(format: "%.1f%%", group.mem))
                     .monospacedDigit().frame(width: ProcCols.mem)
 
@@ -505,7 +541,8 @@ struct ProcGroupRow: View {
                         Text(String(format: "%.0f%%", member.cpu))
                             .monospacedDigit().frame(width: ProcCols.cpu)
                         Text("—").foregroundStyle(.tertiary).frame(width: ProcCols.gpu)
-                            .help("L'usage GPU par processus n'est pas exposé par macOS")
+                            .help(t("L'usage GPU par processus n'est pas exposé par macOS",
+                                "macOS doesn't expose per-process GPU usage"))
                         Text(String(format: "%.1f%%", member.mem))
                             .monospacedDigit().frame(width: ProcCols.mem)
                         Button("KILL") { model.killProcess(member.id) }
@@ -522,6 +559,7 @@ struct ProcGroupRow: View {
 
 struct FanRow: View {
     @ObservedObject var model: StatsModel
+    @ObservedObject private var loc = Localization.shared
     let fan: FanState
     /// Consigne en attente de confirmation par le SMC : pendant le glissement,
     /// puis le court instant qui suit. `nil` → le curseur suit le SMC, ce qui
@@ -538,12 +576,14 @@ struct FanRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 6) {
-                Text("Ventilateur \(fan.id + 1)").font(.system(size: 12, weight: .medium))
-                Badge(text: fan.manual ? "forcé" : "auto", tint: fan.manual ? .orange : nil)
+                Text(t("Ventilateur \(fan.id + 1)", "Fan \(fan.id + 1)")).font(.system(size: 12, weight: .medium))
+                Badge(text: fan.manual ? t("forcé", "forced") : "auto",
+                      tint: fan.manual ? .orange : nil)
                 Spacer()
                 // Au repos, le SMC arrête complètement le ventilateur sur
                 // Apple Silicon : « 0 tr/min » se lirait comme une panne.
-                Text(fan.current < 1 ? "à l'arrêt" : "\(Int(fan.current)) tr/min")
+                Text(fan.current < 1 ? t("à l'arrêt", "stopped")
+                     : t("\(Int(fan.current)) tr/min", "\(Int(fan.current)) rpm"))
                     .font(.system(size: 11)).monospacedDigit().foregroundStyle(.secondary)
                 if fan.manual {
                     Button("Auto") {
@@ -575,7 +615,7 @@ struct FanRow: View {
                 Text("\(Int(fan.min))").font(.system(size: 10)).foregroundStyle(.tertiary)
                 Spacer()
                 if dragging {
-                    Text("→ \(Int(displayed)) tr/min")
+                    Text(t("→ \(Int(displayed)) tr/min", "→ \(Int(displayed)) rpm"))
                         .font(.system(size: 10, weight: .semibold)).monospacedDigit()
                 }
                 Spacer()

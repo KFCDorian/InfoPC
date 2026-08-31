@@ -28,6 +28,9 @@ ventilateurs, avec un curseur pour le forcer**, ce que macOS n'expose nulle part
 La barre de menus est personnalisable : cochez ce que vous voulez y voir
 (CPU, GPU, RAM, réseau, température) dans le menu engrenage du panneau.
 
+**Français ou anglais**, au choix dans ce même menu engrenage. Au premier
+lancement, l'app suit la langue du système.
+
 ## Installation
 
 ### Homebrew (recommandé)
@@ -125,7 +128,6 @@ brew uninstall --cask infopc        # depuis Homebrew
   affiche « — ».
 - Développé et testé sur MacBook Pro **M5** (macOS 26). Les retours sur d'autres
   puces sont les bienvenus dans les [issues](https://github.com/KFCDorian/InfoPC/issues).
-- Interface en français uniquement pour l'instant.
 
 ## Développement
 

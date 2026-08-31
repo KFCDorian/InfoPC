@@ -27,7 +27,7 @@ struct ProcGroup: Identifiable {
 enum ProcSortKey: String, CaseIterable, Identifiable {
     case cpu, memory
     var id: String { rawValue }
-    var label: String { self == .cpu ? "CPU" : "Mémoire" }
+    @MainActor var label: String { self == .cpu ? "CPU" : t("Mémoire", "Memory") }
 }
 
 enum ProcessSampler {
