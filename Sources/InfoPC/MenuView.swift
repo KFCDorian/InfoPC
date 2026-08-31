@@ -280,7 +280,17 @@ struct MenuView: View {
                 FanRow(model: model, fan: fan)
             }
             if !model.fans.isEmpty && !model.helperInstalled {
-                notice("Contrôle désactivé — lancez scripts/install.sh pour installer le helper.")
+                VStack(alignment: .leading, spacing: 6) {
+                    notice("Contrôle désactivé : le pilotage des ventilateurs "
+                           + "passe par un helper privilégié.")
+                    Button("Activer le contrôle des ventilateurs…") {
+                        model.installFanHelper()
+                    }
+                    .controlSize(.small)
+                    .help("Installe /usr/local/bin/infopc-fanctl et une règle "
+                          + "sudo limitée à ce seul binaire. Mot de passe "
+                          + "demandé une seule fois.")
+                }
             }
             if let text = model.fanNotice {
                 notice(text)
@@ -303,10 +313,28 @@ struct MenuView: View {
 
     // MARK: - Claude
 
+    /// Pourquoi cette section porte la mention « expérimental » : elle ne
+    /// repose sur aucun contrat public, contrairement au reste de l'app.
+    static let experimentalNotice = """
+        Fonction expérimentale : elle lit le jeton OAuth de Claude Code dans \
+        le Trousseau et interroge un endpoint non documenté d'Anthropic. \
+        Anthropic peut le modifier sans préavis — l'affichage peut alors \
+        cesser de fonctionner. Le reste de l'app (capteurs, ventilateurs) \
+        n'en dépend pas.
+        """
+
     private var claudeSection: some View {
         SectionCard("Limites Claude", icon: "sparkles", trailing: {
-            if model.claudeLive == nil && model.claude != nil {
-                Badge(text: "estimation locale")
+            HStack(spacing: 5) {
+                if model.claudeLive == nil && model.claude != nil {
+                    Badge(text: "estimation locale")
+                }
+                // Cette section s'appuie sur un endpoint non documenté et sur
+                // le jeton du Trousseau : elle peut cesser de fonctionner sans
+                // préavis. Le dire ici plutôt que de laisser croire à un
+                // affichage garanti comme les capteurs matériels.
+                Badge(text: "expérimental", tint: .orange)
+                    .help(Self.experimentalNotice)
             }
         }) {
             if let live = model.claudeLive {
@@ -331,8 +359,15 @@ struct MenuView: View {
                                 color: gaugeColor(forPercent: fraction * 100))
                 }
             } else {
-                Text("Usage indisponible")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Usage indisponible")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text("Connectez-vous une fois avec le CLI `claude` : "
+                         + "l'app Claude pour macOS ne dépose pas de jeton "
+                         + "lisible dans le Trousseau.")
+                        .font(.system(size: 10)).foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }

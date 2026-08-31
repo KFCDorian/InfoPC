@@ -72,6 +72,47 @@ enum FanController {
     static func setAuto(_ index: Int) -> Bool {
         run(["auto", "\(index)"])
     }
+
+    /// Script embarqué dans le bundle qui pose le helper et sa règle sudoers.
+    /// Absent quand l'app tourne depuis `swift run` (build sans bundle).
+    static var installerPath: String? {
+        let path = Bundle.main.bundlePath + "/Contents/Resources/install-helper.sh"
+        return FileManager.default.isExecutableFile(atPath: path) ? path : nil
+    }
+
+    /// Installe le helper en demandant les droits admin via le dialogue système
+    /// (osascript). C'est le seul moment où l'app a besoin d'un mot de passe :
+    /// ensuite la règle NOPASSWD, ciblée sur ce seul binaire, suffit.
+    /// Renvoie `nil` si tout s'est bien passé, sinon un message à afficher.
+    static func installHelper() -> String? {
+        guard let script = installerPath else {
+            return "Installateur introuvable — lancez scripts/install.sh."
+        }
+        // Le chemin peut contenir des espaces ou une apostrophe : on le quote
+        // pour le shell, puis pour la chaîne AppleScript.
+        let shellQuoted = "'" + script.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        let appleQuoted = shellQuoted.replacingOccurrences(of: "\\", with: "\\\\")
+                                     .replacingOccurrences(of: "\"", with: "\\\"")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e",
+            "do shell script \"\(appleQuoted)\" with administrator privileges"]
+        process.standardOutput = FileHandle.nullDevice
+        let errPipe = Pipe()
+        process.standardError = errPipe
+        do {
+            try process.run()
+            let err = errPipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            if process.terminationStatus == 0 { return nil }
+            let text = String(data: err, encoding: .utf8) ?? ""
+            // -128 : l'utilisateur a fermé le dialogue de mot de passe.
+            if text.contains("-128") { return nil }
+            return "Installation du helper impossible."
+        } catch {
+            return "Installation du helper impossible."
+        }
+    }
 }
 
 @MainActor
@@ -115,7 +156,9 @@ final class StatsModel: ObservableObject {
         }
     }
 
-    let helperInstalled = FanController.isInstalled
+    /// Publié plutôt que constant : le helper peut être posé pendant que
+    /// l'app tourne (bouton « Activer le contrôle »).
+    @Published var helperInstalled = FanController.isInstalled
     var performanceCores: Int { cpuSampler.performanceCores }
     var efficiencyCores: Int { cpuSampler.efficiencyCores }
 
@@ -341,6 +384,21 @@ final class StatsModel: ObservableObject {
         }
         fanNotice = nil
         resyncFans()
+    }
+
+    /// Pose le helper privilégié depuis le popover (dialogue de mot de passe
+    /// système). Sans lui, l'app reste utilisable en lecture seule.
+    /// Hors du thread principal : la saisie du mot de passe peut durer, l'UI ne
+    /// doit pas se figer pendant ce temps.
+    func installFanHelper() {
+        fanNotice = "Installation du helper en cours…"
+        Task { @MainActor [weak self] in
+            let message = await Task.detached { FanController.installHelper() }.value
+            guard let self else { return }
+            self.fanNotice = message
+            self.helperInstalled = FanController.isInstalled
+            if self.helperInstalled { self.resyncFans() }
+        }
     }
 
     /// Relit l'état réel des ventilateurs juste après une commande, sans
